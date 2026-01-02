@@ -23,10 +23,11 @@ function preload() {
 
 function setup() {
 	createCanvas(windowWidth, windowHeight);
-	// Do NOT play video here! Wait for user interaction.
 	noiseGfx = createGraphics(windowWidth, windowHeight);
 	noiseGfx.pixelDensity(1);
 	frameRate(24); // Force 24fps for the sketch
+	video.stop(); // Ensure video is stopped on load
+	video.time(0); // Show first frame
 }
 
 // Set these to your original video/image size
@@ -57,14 +58,10 @@ const squareButtons = [
 ];
 
 let isPlaying = false;
-let waitingForStart = true; // Show overlay until user clicks
 let playingBackward = false;
 let buttonClicked = false; // Track if button was clicked before it moves
 let buttonPressed = false; // Track if button is being pressed
-
-
-
-
+let waitingForButtonClick = true; // Show first frame until button click
 
 function draw() {
 
@@ -93,17 +90,10 @@ function draw() {
 
 	// Center and draw
 	image(video, offsetX, offsetY, displayWidth, displayHeight);
-	if (!isPlaying && !playingBackward) video.pause();
 
-	// Show 'Click to start' overlay if waiting for user interaction
-	if (waitingForStart) {
-		fill(0, 200);
-		rect(0, 0, width, height);
-		fill(255);
-		textAlign(CENTER, CENTER);
-		textSize(32);
-		text('Click to start', width / 2, height / 2);
-		return; // Don't draw the rest until started
+	if (waitingForButtonClick) {
+		// Only show first frame, don't run rest of draw logic
+		return;
 	}
 
 	// Determine which button placement to use
@@ -358,10 +348,11 @@ function playClickSound() {
 }
 
 function mousePressed() {
-	if (waitingForStart) {
+	if (waitingForButtonClick && isInsideButton(mouseX, mouseY)) {
 		video.play();
-		isPlaying = true;
-		waitingForStart = false;
+		waitingForButtonClick = false;
+		playClickSound();
+		buttonPressed = true;
 		return;
 	}
 	if (isInsideButton(mouseX, mouseY)) {
