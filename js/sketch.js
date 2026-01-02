@@ -14,7 +14,7 @@ let userInteracted = false; // Track if user has interacted
 function preload() {
        video = createVideo(['img/video.mp4']);
        video.hide();
-       video.onloadeddata(() => {
+       video.on('loadeddata', () => {
 	       videoLoaded = true;
 	       // Only capture first frame after user interaction
        });
