@@ -9,19 +9,14 @@ let lightMaskImg; // image for light mask
 
 let videoLoaded = false; // Track if video is loaded
 let videoFirstFrameImg; // Fallback image for first frame
+let userInteracted = false; // Track if user has interacted
 
 function preload() {
        video = createVideo(['img/video.mp4']);
        video.hide();
        video.onloadeddata(() => {
 	       videoLoaded = true;
-	       // Capture the first frame as an image for fallback
-	       video.time(0);
-	       setTimeout(() => {
-		       let tempGfx = createGraphics(video.width, video.height);
-		       tempGfx.image(video, 0, 0, video.width, video.height);
-		       videoFirstFrameImg = tempGfx.get();
-	       }, 200); // Wait a bit for frame to render
+	       // Only capture first frame after user interaction
        });
        clickSound = loadSound('/sound/clic.wav');
        jingleSound = loadSound('/sound/jingle.wav');
@@ -79,45 +74,46 @@ let waitingForButtonClick = true; // Show first frame until button click
 function draw() {
 
 
-       noSmooth();
+	function draw() {
+	       noSmooth();
 
-       // Calculate aspect ratios
-       let videoAspect = video.width / video.height;
-       let canvasAspect = width / height;
+	       // Calculate aspect ratios
+	       let videoAspect = video.width / video.height;
+	       let canvasAspect = width / height;
 
-       let displayWidth, displayHeight, offsetX, offsetY, scale;
+	       let displayWidth, displayHeight, offsetX, offsetY, scale;
 
-       // Cover the entire canvas (crop on smaller sides)
-       if (videoAspect > canvasAspect) {
-	       displayHeight = height;
-	       displayWidth = height * videoAspect;
-	       offsetX = (width - displayWidth) / 2;
-	       offsetY = 0;
-	       scale = displayHeight / video.height;
-       } else {
-	       displayWidth = width;
-	       displayHeight = width / videoAspect;
-	       offsetX = 0;
-	       offsetY = (height - displayHeight) / 2;
-	       scale = displayWidth / video.width;
-       }
+	       // Cover the entire canvas (crop on smaller sides)
+	       if (videoAspect > canvasAspect) {
+		       displayHeight = height;
+		       displayWidth = height * videoAspect;
+		       offsetX = (width - displayWidth) / 2;
+		       offsetY = 0;
+		       scale = displayHeight / video.height;
+	       } else {
+		       displayWidth = width;
+		       displayHeight = width / videoAspect;
+		       offsetX = 0;
+		       offsetY = (height - displayHeight) / 2;
+		       scale = displayWidth / video.width;
+	       }
 
-       // Draw video or fallback image
-       if (videoLoaded) {
-	       image(video, offsetX, offsetY, displayWidth, displayHeight);
-       } else if (videoFirstFrameImg) {
-	       image(videoFirstFrameImg, offsetX, offsetY, displayWidth, displayHeight);
-       } else {
-	       // Optional: draw a loading spinner or background
-	       background(0);
-       }
+	       // Draw video only after user interaction and video loaded
+	       if (userInteracted && videoLoaded) {
+		       image(video, offsetX, offsetY, displayWidth, displayHeight);
+	       } else {
+		       // Fallback: show a message or black background
+		       background(0);
+		       fill(255);
+		       textAlign(CENTER, CENTER);
+		       textSize(24);
+		       text('Cliquez ou touchez pour démarrer', width/2, height/2);
+	       }
 
-       if (waitingForButtonClick) {
-	       // Only show first frame, don't run rest of draw logic
-	       return;
-       }
-
-	// Determine which button placement to use
+	       if (!userInteracted || waitingForButtonClick) {
+		       // Only show first frame, don't run rest of draw logic
+		       return;
+	       }
 	let frame = Math.floor(video.time() * VIDEO_FRAMERATE);
 	let bx, by, bw, bh;
 	let buttonMoved = frame >= 30; // Button moves at frame 30
@@ -369,17 +365,23 @@ function playClickSound() {
 }
 
 function mousePressed() {
-	if (waitingForButtonClick && isInsideButton(mouseX, mouseY)) {
-		video.play();
-		waitingForButtonClick = false;
-		playClickSound();
-		buttonPressed = true;
-		return;
-	}
-	if (isInsideButton(mouseX, mouseY)) {
-		playClickSound();
-		buttonPressed = true;
-	}
+       if (!userInteracted) {
+	       userInteracted = true;
+	       // On first interaction, ensure video is at first frame and loaded
+	       video.time(0);
+	       video.stop();
+       }
+       if (waitingForButtonClick && isInsideButton(mouseX, mouseY)) {
+	       video.play();
+	       waitingForButtonClick = false;
+	       playClickSound();
+	       buttonPressed = true;
+	       return;
+       }
+       if (isInsideButton(mouseX, mouseY)) {
+	       playClickSound();
+	       buttonPressed = true;
+       }
 	// Arrow buttons
 	let frame = Math.floor(video.time() * VIDEO_FRAMERATE);
 	let buttonMoved = frame >= 30;
@@ -444,21 +446,26 @@ function mouseReleased() {
 }
 
 function touchStarted() {
-	if (isInsideButton(touchX, touchY)) {
-		playClickSound();
-		buttonPressed = true;
-	}
-	// Arrow buttons
-	let frame = Math.floor(video.time() * VIDEO_FRAMERATE);
-	let buttonMoved = frame >= 30;
-	if (buttonMoved) {
-		let arrowIdx = isInsideArrowButton(touchX, touchY);
-		if (arrowIdx !== -1 && ticlicSound && ticlicSound.isLoaded()) {
-			ticlicSound.setVolume(0.4);
-			ticlicSound.rate(1.3); // higher pitch
-			ticlicSound.play();
-		}
-	}
+       if (!userInteracted) {
+	       userInteracted = true;
+	       video.time(0);
+	       video.stop();
+       }
+       if (isInsideButton(touchX, touchY)) {
+	       playClickSound();
+	       buttonPressed = true;
+       }
+       // Arrow buttons
+       let frame = Math.floor(video.time() * VIDEO_FRAMERATE);
+       let buttonMoved = frame >= 30;
+       if (buttonMoved) {
+	       let arrowIdx = isInsideArrowButton(touchX, touchY);
+	       if (arrowIdx !== -1 && ticlicSound && ticlicSound.isLoaded()) {
+		       ticlicSound.setVolume(0.4);
+		       ticlicSound.rate(1.3); // higher pitch
+		       ticlicSound.play();
+	       }
+       }
 }
 
 function touchEnded() {
