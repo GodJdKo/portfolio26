@@ -8,16 +8,20 @@ let ticlicSound; // sound for arrow buttons
 let lightMaskImg; // image for light mask
 
 function preload() {
-	video = createVideo(['img/video.mp4']);
-	video.hide();
-	clickSound = loadSound('/sound/clic.wav');
-	jingleSound = loadSound('/sound/jingle.wav');
-	antijingleSound = loadSound('/sound/antijingle.wav');
-	clacSound = loadSound('/sound/clac.wav');
-	btnPressedImg = loadImage('img/btnpressed.png');
-	ticlicSound = loadSound('/sound/ticlic.wav');
-	lightMaskImg = loadImage('img/lightmask.png');
-	framerate = 24; // <-- set this to your video's frame rate
+       video = createVideo(['img/video.mp4']);
+       video.hide();
+       video.elt.onloadeddata = () => {
+	       videoLoaded = true;
+	       // Only capture first frame after user interaction
+       };
+       clickSound = loadSound('sound/clic.wav');
+       jingleSound = loadSound('sound/jingle.wav');
+       antijingleSound = loadSound('sound/antijingle.wav');
+       clacSound = loadSound('sound/clac.wav');
+       btnPressedImg = loadImage('img/btnpressed.png');
+       ticlicSound = loadSound('sound/ticlic.wav');
+       lightMaskImg = loadImage('img/lightmask.png');
+       framerate = 24; // <-- set this to your video's frame rate
 }
 
 
