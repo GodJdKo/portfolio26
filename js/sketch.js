@@ -111,6 +111,7 @@ let buttonPressed = false; // Track if button is being pressed
 let waitingForButtonClick = true; // Show first frame until button click
 let lastTouchX = 0;
 let lastTouchY = 0;
+let backwardAnimFrame = null;
 
 function draw() {
 
@@ -254,22 +255,17 @@ function draw() {
 
 	}
 
-	// Backward playback: step back and pause at first frame
+	// Backward playback: step back frame by frame
 	if (playingBackward) {
-		let currentTime = video.time();
-		let stepSize = 1 / VIDEO_FRAMERATE; // Go back one frame at a time
-		let t = currentTime - stepSize;
-		
-		if (t <= 0) {
+		let currentFrame = Math.floor(video.time() * VIDEO_FRAMERATE);
+		if (currentFrame <= 0) {
 			video.time(0);
 			video.pause();
 			playingBackward = false;
 		} else {
-			video.time(t);
-			// Force a redraw on mobile by pausing and immediately checking
-			if (video.elt && video.elt.paused) {
-				video.pause();
-			}
+			// Step back 1 frame
+			let targetFrame = currentFrame - 1;
+			video.time(targetFrame / VIDEO_FRAMERATE);
 		}
 	}
 
@@ -295,11 +291,17 @@ function draw() {
 		let by = buttonOriginalY2;
 		let bw = buttonW2;
 		let bh = buttonH2;
-		let buttonX = offsetX + (bx / videoOriginalWidth) * displayWidth;
-		let buttonY = offsetY + (by / videoOriginalHeight) * displayHeight;
-		let buttonDisplayW = bw * (displayWidth / videoOriginalWidth);
-		let buttonDisplayH = bh * (displayHeight / videoOriginalHeight);
-		image(lightMaskImg, buttonX-20, buttonY-23, buttonDisplayW+32, buttonDisplayH+32);
+		let scaleFactor = displayWidth / videoOriginalWidth;
+		let buttonX = offsetX + (bx * scaleFactor);
+		let buttonY = offsetY + (by * scaleFactor);
+		let buttonDisplayW = bw * scaleFactor;
+		let buttonDisplayH = bh * scaleFactor;
+		// Scale the offset proportionally
+		let maskOffsetX = 20 * scaleFactor;
+		let maskOffsetY = 23 * scaleFactor;
+		let maskExtraW = 32 * scaleFactor;
+		let maskExtraH = 32 * scaleFactor;
+		image(lightMaskImg, buttonX - maskOffsetX, buttonY - maskOffsetY, buttonDisplayW + maskExtraW, buttonDisplayH + maskExtraH);
 	}
 
 	// Render lightmask.png in front of each arrow button when pressed and at second position
@@ -329,7 +331,9 @@ function draw() {
 				}
 			}
 			if (pressed) {
-				image(lightMaskImg, btnX+10, btnY+10, btnSize-20, btnSize-20);
+				// Scale the inset proportionally
+				let maskInset = 10 * scaleFactor;
+				image(lightMaskImg, btnX + maskInset, btnY + maskInset, btnSize - (maskInset * 2), btnSize - (maskInset * 2));
 			}
 		}
 	}
