@@ -511,7 +511,14 @@ function mouseReleased() {
 }
 
 function touchStarted() {
-	if (isInsideButton(touchX, touchY)) {
+	if (waitingForButtonClick && isInsideButton(touches[0].x, touches[0].y)) {
+		video.play();
+		waitingForButtonClick = false;
+		playClickSound();
+		buttonPressed = true;
+		return false; // Prevent default
+	}
+	if (isInsideButton(touches[0].x, touches[0].y)) {
 		playClickSound();
 		buttonPressed = true;
 	}
@@ -519,16 +526,21 @@ function touchStarted() {
 	let frame = Math.floor(video.time() * VIDEO_FRAMERATE);
 	let buttonMoved = frame >= 30;
 	if (buttonMoved) {
-		let arrowIdx = isInsideArrowButton(touchX, touchY);
+		let arrowIdx = isInsideArrowButton(touches[0].x, touches[0].y);
 		if (arrowIdx !== -1 && ticlicSound && ticlicSound.isLoaded()) {
 			ticlicSound.setVolume(0.4);
 			ticlicSound.rate(1.3); // higher pitch
 			ticlicSound.play();
 		}
 	}
+	return false; // Prevent default
 }
 
 function touchEnded() {
+	// Use the last known touch position from the touches array
+	let touchX = touches.length > 0 ? touches[0].x : mouseX;
+	let touchY = touches.length > 0 ? touches[0].y : mouseY;
+	
 	if (buttonPressed && isInsideButton(touchX, touchY)) {
 		if (clacSound && clacSound.isLoaded()) {
 			clacSound.play();
@@ -576,6 +588,7 @@ function touchEnded() {
 		}
 	}
 	buttonPressed = false;
+	return false; // Prevent default
 }
 
 function windowResized() {
