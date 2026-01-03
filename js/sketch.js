@@ -8,35 +8,52 @@ let ticlicSound; // sound for arrow buttons
 let lightMaskImg; // image for light mask
 let video; // Declare video globally
 let videoLoaded = false; // Track if video is loaded
-console.log("video not loaded yet");
 
 function preload() {
+       console.log("Preload starting, attempting to load video...");
+       
        video = createVideo(['img/video.mp4'], () => {
            console.log("Video loaded callback fired");
            videoLoaded = true;
-           video.time(0);
+           if (video && video.elt) {
+               video.time(0);
+               console.log("Video duration:", video.duration(), "Video size:", video.width, "x", video.height);
+           }
        });
        
        if (video) {
            video.hide();
+           console.log("Video element created");
+           
            // Use addEventListener for better reliability
            if (video.elt) {
                 video.elt.addEventListener('loadeddata', () => {
                     videoLoaded = true;
-                    console.log("video loaded (event listener)");
+                    console.log("video loaded (event listener) - readyState:", video.elt.readyState);
                     video.time(0);
                 });
                 
                 video.elt.addEventListener('error', (e) => {
-                    console.error("Video load error:", e);
+                    console.error("Video load error:", e, "Error code:", video.elt.error ? video.elt.error.code : 'unknown');
+                });
+                
+                video.elt.addEventListener('loadstart', () => {
+                    console.log("Video load started");
+                });
+                
+                video.elt.addEventListener('progress', () => {
+                    console.log("Video loading progress...");
                 });
 
                 // Fallback: check if metadata is already loaded
                 if (video.elt.readyState >= 2) {
                     videoLoaded = true;
                     video.time(0);
+                    console.log("Video already loaded (readyState check)");
                 }
            }
+       } else {
+           console.error("Failed to create video element!");
        }
        
        clickSound = loadSound('sound/clic.wav');
