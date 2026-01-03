@@ -256,13 +256,20 @@ function draw() {
 
 	// Backward playback: step back and pause at first frame
 	if (playingBackward) {
-		let t = video.time() - (4 / VIDEO_FRAMERATE);
+		let currentTime = video.time();
+		let stepSize = 1 / VIDEO_FRAMERATE; // Go back one frame at a time
+		let t = currentTime - stepSize;
+		
 		if (t <= 0) {
 			video.time(0);
 			video.pause();
 			playingBackward = false;
 		} else {
 			video.time(t);
+			// Force a redraw on mobile by pausing and immediately checking
+			if (video.elt && video.elt.paused) {
+				video.pause();
+			}
 		}
 	}
 
