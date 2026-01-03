@@ -109,6 +109,8 @@ let playingBackward = false;
 let buttonClicked = false; // Track if button was clicked before it moves
 let buttonPressed = false; // Track if button is being pressed
 let waitingForButtonClick = true; // Show first frame until button click
+let lastTouchX = 0;
+let lastTouchY = 0;
 
 function draw() {
 
@@ -511,14 +513,20 @@ function mouseReleased() {
 }
 
 function touchStarted() {
-	if (waitingForButtonClick && isInsideButton(touches[0].x, touches[0].y)) {
+	// Check if touches exist and store coordinates
+	if (!touches || touches.length === 0) return false;
+	
+	lastTouchX = touches[0].x;
+	lastTouchY = touches[0].y;
+	
+	if (waitingForButtonClick && isInsideButton(lastTouchX, lastTouchY)) {
 		video.play();
 		waitingForButtonClick = false;
 		playClickSound();
 		buttonPressed = true;
 		return false; // Prevent default
 	}
-	if (isInsideButton(touches[0].x, touches[0].y)) {
+	if (isInsideButton(lastTouchX, lastTouchY)) {
 		playClickSound();
 		buttonPressed = true;
 	}
@@ -526,7 +534,7 @@ function touchStarted() {
 	let frame = Math.floor(video.time() * VIDEO_FRAMERATE);
 	let buttonMoved = frame >= 30;
 	if (buttonMoved) {
-		let arrowIdx = isInsideArrowButton(touches[0].x, touches[0].y);
+		let arrowIdx = isInsideArrowButton(lastTouchX, lastTouchY);
 		if (arrowIdx !== -1 && ticlicSound && ticlicSound.isLoaded()) {
 			ticlicSound.setVolume(0.4);
 			ticlicSound.rate(1.3); // higher pitch
@@ -537,11 +545,8 @@ function touchStarted() {
 }
 
 function touchEnded() {
-	// Use the last known touch position from the touches array
-	let touchX = touches.length > 0 ? touches[0].x : mouseX;
-	let touchY = touches.length > 0 ? touches[0].y : mouseY;
-	
-	if (buttonPressed && isInsideButton(touchX, touchY)) {
+	// Use stored touch coordinates from touchStarted
+	if (buttonPressed && isInsideButton(lastTouchX, lastTouchY)) {
 		if (clacSound && clacSound.isLoaded()) {
 			clacSound.play();
 		}
@@ -581,7 +586,7 @@ function touchEnded() {
 	let frame = Math.floor(video.time() * VIDEO_FRAMERATE);
 	let buttonMoved = frame >= 30;
 	if (buttonMoved) {
-		let arrowIdx = isInsideArrowButton(touchX, touchY);
+		let arrowIdx = isInsideArrowButton(lastTouchX, lastTouchY);
 		if (arrowIdx !== -1 && ticlicSound && ticlicSound.isLoaded()) {
 			ticlicSound.rate(0.8); // lower pitch
 			ticlicSound.play();
