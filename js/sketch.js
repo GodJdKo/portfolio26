@@ -7,7 +7,7 @@ let btnPressedImg; // image for pressed button
 let ticlicSound; // sound for arrow buttons
 let lightMaskImg; // image for light mask
 let videoLoaded = false; // Track if video is loaded
-print ("video not loaded yet");
+console.log("video not loaded yet");
 
 function preload() {
        video = createVideo(['img/video.mp4']);
@@ -15,7 +15,7 @@ function preload() {
        // Use addEventListener for better reliability
        video.elt.addEventListener('loadeddata', () => {
 	       videoLoaded = true;
-		   print ("video loaded");
+		   console.log("video loaded");
 	       video.time(0);
        });
        // Fallback: check if metadata is already loaded
