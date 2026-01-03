@@ -151,11 +151,37 @@ function draw() {
 		textAlign(CENTER, CENTER);
 		textSize(16);
 		text("Loading...", width/2, height/2);
-	
+		return;
+	}
 
 	if (waitingForButtonClick) {
-		// Only show first frame, don't run rest of draw logic
-		return;
+		// Draw button hitbox even when waiting
+		let frame = Math.floor(video.time() * VIDEO_FRAMERATE);
+		let bx = buttonOriginalX;
+		let by = buttonOriginalY;
+		let bw = buttonW;
+		let bh = buttonH;
+		
+		let buttonX = offsetX + (bx / videoOriginalWidth) * displayWidth;
+		let buttonY = offsetY + (by / videoOriginalHeight) * displayHeight;
+		let buttonDisplayW = bw * (displayWidth / videoOriginalWidth);
+		let buttonDisplayH = bh * (displayHeight / videoOriginalHeight);
+		
+		// Debug visualization
+		noFill();
+		stroke(0, 255, 0);
+		strokeWeight(2);
+		rect(buttonX, buttonY, buttonDisplayW, buttonDisplayH);
+		
+		// Check for button hover
+		if (mouseX >= buttonX && mouseX <= buttonX + buttonDisplayW &&
+		    mouseY >= buttonY && mouseY <= buttonY + buttonDisplayH) {
+			document.body.style.cursor = 'pointer';
+		} else {
+			document.body.style.cursor = 'default';
+		}
+		
+		return; // Don't run rest of draw logic
 	}
 
 	// Determine which button placement to use
