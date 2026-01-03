@@ -6,22 +6,37 @@ let clacSound; // clac sound
 let btnPressedImg; // image for pressed button
 let ticlicSound; // sound for arrow buttons
 let lightMaskImg; // image for light mask
+let video; // Declare video globally
 let videoLoaded = false; // Track if video is loaded
 console.log("video not loaded yet");
 
 function preload() {
-       video = createVideo(['img/video.mp4']);
-       video.hide();
-       // Use addEventListener for better reliability
-       video.elt.addEventListener('loadeddata', () => {
-	       videoLoaded = true;
-		   console.log("video loaded");
-	       video.time(0);
-       });
-       // Fallback: check if metadata is already loaded
-       if (video.elt.readyState >= 2) {
+       video = createVideo(['img/video.mp4'], () => {
+           console.log("Video loaded callback fired");
            videoLoaded = true;
            video.time(0);
+       });
+       
+       if (video) {
+           video.hide();
+           // Use addEventListener for better reliability
+           if (video.elt) {
+                video.elt.addEventListener('loadeddata', () => {
+                    videoLoaded = true;
+                    console.log("video loaded (event listener)");
+                    video.time(0);
+                });
+                
+                video.elt.addEventListener('error', (e) => {
+                    console.error("Video load error:", e);
+                });
+
+                // Fallback: check if metadata is already loaded
+                if (video.elt.readyState >= 2) {
+                    videoLoaded = true;
+                    video.time(0);
+                }
+           }
        }
        
        clickSound = loadSound('sound/clic.wav');
@@ -40,7 +55,9 @@ function setup() {
 	noiseGfx = createGraphics(windowWidth, windowHeight);
 	noiseGfx.pixelDensity(1);
 	frameRate(24); // Force 24fps for the sketch
-	video.time(0); // Show first frame
+	if (video) {
+        video.time(0); // Show first frame
+    }
 }
 
 // Set these to your original video/image size
