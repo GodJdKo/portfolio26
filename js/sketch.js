@@ -90,7 +90,7 @@ const buttonOriginalY = 1261;
 const buttonW = 40;
 const buttonH = 70;
 
-// Button position in original image (from frame 95 onward)
+// Button position in second image (from frame 95 onward)
 const buttonOriginalX2 = 290; // set your new X
 const buttonOriginalY2 = 1375; // set your new Y
 const buttonW2 = 60; // set your new width
@@ -98,10 +98,10 @@ const buttonH2 = 100; // set your new height
 
 // New square button definitions (original video coordinates)
 const squareButtons = [
-	{ x: 555,  y: 1365, size: 60 },
-	{ x: 620, y: 1365, size: 60 },
-	{ x: 685, y: 1365, size: 60 },
-	{ x: 750, y: 1365, size: 60 }
+	{ x: 550,  y: 1355, size: 70 },
+	{ x: 615, y: 1355, size: 70 },
+	{ x: 680, y: 1355, size: 70 },
+	{ x: 745, y: 1355, size: 70 }
 ];
 
 let isPlaying = false;
@@ -112,6 +112,7 @@ let waitingForButtonClick = true; // Show first frame until button click
 let lastTouchX = 0;
 let lastTouchY = 0;
 let backwardAnimFrame = null;
+let lastBackwardStepTime = 0;
 
 function draw() {
 
@@ -170,11 +171,11 @@ function draw() {
 		let buttonDisplayW = bw * (displayWidth / videoOriginalWidth);
 		let buttonDisplayH = bh * (displayHeight / videoOriginalHeight);
 		
-		// Debug visualization
+		/////////////////////////////////// Debug visualization
 		noFill();
 		stroke(0, 255, 0);
 		strokeWeight(2);
-		rect(buttonX, buttonY, buttonDisplayW, buttonDisplayH);
+		//rect(buttonX, buttonY, buttonDisplayW, buttonDisplayH);
 		
 		// Check for button hover
 		if (mouseX >= buttonX && mouseX <= buttonX + buttonDisplayW &&
@@ -210,12 +211,6 @@ function draw() {
 	let buttonDisplayW = bw * (displayWidth / videoOriginalWidth);
 	let buttonDisplayH = bh * (displayHeight / videoOriginalHeight);
 
-	// control button debug
-	// if (!buttonClicked || buttonMoved) {
-	// 	noFill();
-	// 	stroke(0, 255, 0);
-	// 	rect(buttonX, buttonY, buttonDisplayW, buttonDisplayH);
-	// }
 
 	// Set cursor to pointer if mouse is over the button and it's visible, else default
 	let arrowHovered = false;
@@ -255,17 +250,24 @@ function draw() {
 
 	}
 
-	// Backward playback: step back frame by frame
+	// Backward playback: step back multiple frames at once for smoother playback
 	if (playingBackward) {
-		let currentFrame = Math.floor(video.time() * VIDEO_FRAMERATE);
-		if (currentFrame <= 0) {
-			video.time(0);
-			video.pause();
-			playingBackward = false;
-		} else {
-			// Step back 1 frame
-			let targetFrame = currentFrame - 1;
-			video.time(targetFrame / VIDEO_FRAMERATE);
+		let now = millis();
+		let frameInterval = 1000 / VIDEO_FRAMERATE; // Time per frame in ms
+		
+		if (now - lastBackwardStepTime >= frameInterval) {
+			let currentTime = video.time();
+			let stepBack = 4 / VIDEO_FRAMERATE; // Jump back 4 frames at a time
+			let newTime = currentTime - stepBack;
+			
+			if (newTime <= 0) {
+				video.time(0);
+				video.pause();
+				playingBackward = false;
+			} else {
+				video.time(newTime);
+				lastBackwardStepTime = now;
+			}
 		}
 	}
 
@@ -291,16 +293,18 @@ function draw() {
 		let by = buttonOriginalY2;
 		let bw = buttonW2;
 		let bh = buttonH2;
-		let scaleFactor = displayWidth / videoOriginalWidth;
-		let buttonX = offsetX + (bx * scaleFactor);
-		let buttonY = offsetY + (by * scaleFactor);
-		let buttonDisplayW = bw * scaleFactor;
-		let buttonDisplayH = bh * scaleFactor;
+		// Use the same scale factor calculation as the rest of the code
+		let scaleX = displayWidth / videoOriginalWidth;
+		let scaleY = displayHeight / videoOriginalHeight;
+		let buttonX = offsetX + (bx * scaleX);
+		let buttonY = offsetY + (by * scaleY);
+		let buttonDisplayW = bw * scaleX;
+		let buttonDisplayH = bh * scaleY;
 		// Scale the offset proportionally
-		let maskOffsetX = 20 * scaleFactor;
-		let maskOffsetY = 23 * scaleFactor;
-		let maskExtraW = 32 * scaleFactor;
-		let maskExtraH = 32 * scaleFactor;
+		let maskOffsetX = 12 * scaleX;
+		let maskOffsetY = 23 * scaleY;
+		let maskExtraW = 20 * scaleX;
+		let maskExtraH = 39 * scaleY;
 		image(lightMaskImg, buttonX - maskOffsetX, buttonY - maskOffsetY, buttonDisplayW + maskExtraW, buttonDisplayH + maskExtraH);
 	}
 
