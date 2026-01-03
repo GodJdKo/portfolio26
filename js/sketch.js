@@ -11,7 +11,7 @@ let videoLoaded = false; // Track if video is loaded
 console.log("video not loaded yet");
 
 function preload() {
-       video = createVideo(['img/background.mp4'], () => {
+       video = createVideo(['img/video.mp4'], () => {
            console.log("Video loaded callback fired");
            videoLoaded = true;
            video.time(0);
