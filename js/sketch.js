@@ -71,7 +71,7 @@ const video4AutoPlayDelay = 1000; // Wait 1s after scroll before auto-playing
 const video4KeyScrubSpeed = 50; // ms per frame when holding arrow key (faster than auto-play)
 
 function preload() {
-	// Setup all videos
+	// Setup all videos - only load essential ones initially
 	video = setupVideo('img/video.mp4', () => {
 		videoLoaded = true;
 	});
@@ -80,24 +80,14 @@ function preload() {
 		reverseVideoLoaded = true;
 	});
 	
-	video2 = setupVideo('img/video2.mp4', () => {
-		video2Loaded = true;
-	});
-	
-	reverseVideo2 = setupVideo('img/reversevideo2.mp4', () => {
-		reverseVideo2Loaded = true;
-	});
-	
-	video3 = setupVideo('img/video3.mp4', () => {
-		video3Loaded = true;
-	});
+	// Videos 2, 3, 5 will be loaded on-demand to save memory
+	video2 = null;
+	reverseVideo2 = null;
+	video3 = null;
+	video5 = null;
 	
 	// Video4 frames load on-demand for better performance
 	video4Loaded = true;
-	
-	video5 = setupVideo('img/video5.mp4', () => {
-		video5Loaded = true;
-	});
 	
 	// Load sounds
 	clickSound = loadSound('sound/clic.wav');
@@ -124,11 +114,27 @@ function preload() {
 }
 
 function setup() {
-	createCanvas(windowWidth, windowHeight);
+	let canvas = createCanvas(windowWidth, windowHeight);
+	canvas.parent(document.body);
+	
+	// Optimize for iOS devices
+	let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+	if (isIOS) {
+		// Lower pixel density on iOS to prevent crashes
+		pixelDensity(1);
+	}
+	
 	noiseGfx = createGraphics(windowWidth, windowHeight);
 	noiseGfx.pixelDensity(1);
 	frameRate(VIDEO_FRAMERATE);
 	if (video) video.time(0);
+	
+	// Prevent default touch behaviors on iOS
+	document.body.style.touchAction = 'none';
+	document.body.style.overflow = 'hidden';
+	document.body.style.position = 'fixed';
+	document.body.style.width = '100%';
+	document.body.style.height = '100%';
 }
 
 
@@ -163,8 +169,12 @@ function setupVideo(videoPath, onLoadCallback) {
 	if (vid.elt) {
 		vid.elt.setAttribute('playsinline', 'true');
 		vid.elt.setAttribute('webkit-playsinline', 'true');
-		vid.elt.setAttribute('preload', 'auto');
+		vid.elt.setAttribute('preload', 'metadata');
+		vid.elt.setAttribute('crossorigin', 'anonymous');
 		vid.elt.muted = false;
+		
+		// iOS needs user interaction to enable sound
+		vid.elt.load();
 		
 		vid.elt.addEventListener('loadedmetadata', () => {
 			onLoadCallback();
@@ -187,6 +197,16 @@ function setupVideo(videoPath, onLoadCallback) {
 	}
 	
 	return vid;
+}
+
+// Helper function: Load video on demand
+function loadVideoOnDemand(videoPath, loadedFlag) {
+	return new Promise((resolve) => {
+		let vid = setupVideo(videoPath, () => {
+			window[loadedFlag] = true;
+			resolve(vid);
+		});
+	});
 }
 
 // Helper function: Calculate display dimensions for video/image
@@ -356,8 +376,9 @@ function draw() {
 			
 			// Smart preloading: adaptive radius based on device and only load if frame changed
 			if (frameIndex !== video4PrevFrame) {
-				// Smaller radius on mobile for better performance
-				let preloadRadius = (width < 768) ? 15 : 30;
+				// Smaller radius on mobile for better performance and to prevent crashes
+				let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+				let preloadRadius = isIOS ? 10 : (width < 768) ? 15 : 30;
 				
 				// Prioritize forward loading (direction of auto-play)
 				for (let i = 0; i <= preloadRadius; i++) {
@@ -736,6 +757,13 @@ function navigateRight() {
 			currentUIState = 'p1';
 		} else if (currentUIState === 'p2') {
 			showingUI = false;
+			// Load video3 and video5 on-demand when needed
+			if (!video3) {
+				video3 = setupVideo('img/video3.mp4', () => { video3Loaded = true; });
+			}
+			if (!video5) {
+				video5 = setupVideo('img/video5.mp4', () => { video5Loaded = true; });
+			}
 			if (video3Loaded && video3) {
 				video3.time(0);
 				video3.play();
@@ -743,6 +771,13 @@ function navigateRight() {
 			}
 		} else if (currentUIState === 'p3') {
 			showingUI = false;
+			// Load video2 and reverseVideo2 on-demand when needed
+			if (!video2) {
+				video2 = setupVideo('img/video2.mp4', () => { video2Loaded = true; });
+			}
+			if (!reverseVideo2) {
+				reverseVideo2 = setupVideo('img/reversevideo2.mp4', () => { reverseVideo2Loaded = true; });
+			}
 			if (video2Loaded && video2) {
 				video2.time(0);
 				video2.play();
