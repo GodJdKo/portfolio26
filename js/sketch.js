@@ -849,11 +849,14 @@ function handleButtonPressStart(x, y) {
 		buttonPressed = true;
 	}
 	
-	let bounds = getButtonBounds();
-	if (bounds.frame >= 35) {
-		let arrowIdx = isInsideArrowButton(x, y);
-		if (arrowIdx !== -1) {
-			playSound(ticlicSound, 0.4, 1.3);
+	// Handle arrow button press (only when not in video2)
+	if (!playingVideo2) {
+		let bounds = getButtonBounds();
+		if (bounds.frame >= 35) {
+			let arrowIdx = isInsideArrowButton(x, y);
+			if (arrowIdx !== -1) {
+				playSound(ticlicSound, 0.4, 1.3);
+			}
 		}
 	}
 }
