@@ -114,19 +114,27 @@ function preload() {
 }
 
 function setup() {
-	let canvas = createCanvas(windowWidth, windowHeight);
+	// Wait for proper viewport size on iOS
+	let w = window.innerWidth;
+	let h = window.innerHeight;
+	
+	let canvas = createCanvas(w, h);
 	canvas.parent(document.body);
 	
 	// Optimize for iOS devices
 	let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 	if (isIOS) {
-		// Lower pixel density on iOS to prevent crashes
+		// Force lowest pixel density on iOS to prevent crashes
 		pixelDensity(1);
+		// Reduce frame rate on iOS for stability
+		frameRate(20);
+	} else {
+		frameRate(VIDEO_FRAMERATE);
 	}
 	
-	noiseGfx = createGraphics(windowWidth, windowHeight);
+	noiseGfx = createGraphics(w, h);
 	noiseGfx.pixelDensity(1);
-	frameRate(VIDEO_FRAMERATE);
+	
 	if (video) video.time(0);
 	
 	// Prevent default touch behaviors on iOS
@@ -135,6 +143,38 @@ function setup() {
 	document.body.style.position = 'fixed';
 	document.body.style.width = '100%';
 	document.body.style.height = '100%';
+	document.body.style.margin = '0';
+	document.body.style.padding = '0';
+	
+	// Force resize after a moment to fix iOS initial sizing
+	if (isIOS) {
+		setTimeout(() => {
+			resizeCanvas(window.innerWidth, window.innerHeight);
+			cachedDims = null;
+		}, 100);
+	}
+	
+	// Handle orientation changes on iOS
+	window.addEventListener('orientationchange', () => {
+		setTimeout(() => {
+			resizeCanvas(window.innerWidth, window.innerHeight);
+			noiseGfx = createGraphics(window.innerWidth, window.innerHeight);
+			noiseGfx.pixelDensity(1);
+			cachedDims = null;
+		}, 100);
+	});
+	
+	// Enable audio on iOS with user interaction
+	if (isIOS) {
+		document.addEventListener('touchstart', function enableAudio() {
+			if (clickSound && clickSound.isLoaded()) {
+				clickSound.setVolume(0.01);
+				clickSound.play();
+				clickSound.stop();
+			}
+			document.removeEventListener('touchstart', enableAudio);
+		}, { once: true });
+	}
 }
 
 
@@ -167,14 +207,23 @@ function setupVideo(videoPath, onLoadCallback) {
 	vid.hide();
 	
 	if (vid.elt) {
+		let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+		
 		vid.elt.setAttribute('playsinline', 'true');
 		vid.elt.setAttribute('webkit-playsinline', 'true');
-		vid.elt.setAttribute('preload', 'metadata');
+		vid.elt.setAttribute('preload', isIOS ? 'none' : 'metadata');
 		vid.elt.setAttribute('crossorigin', 'anonymous');
 		vid.elt.muted = false;
 		
+		// Reduce quality on iOS for smoother playback
+		if (isIOS) {
+			vid.elt.style.imageRendering = 'auto';
+		}
+		
 		// iOS needs user interaction to enable sound
-		vid.elt.load();
+		if (isIOS) {
+			vid.elt.load();
+		}
 		
 		vid.elt.addEventListener('loadedmetadata', () => {
 			onLoadCallback();
@@ -376,9 +425,9 @@ function draw() {
 			
 			// Smart preloading: adaptive radius based on device and only load if frame changed
 			if (frameIndex !== video4PrevFrame) {
-				// Smaller radius on mobile for better performance and to prevent crashes
+				// Much smaller radius on iOS to prevent crashes and smooth performance
 				let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-				let preloadRadius = isIOS ? 10 : (width < 768) ? 15 : 30;
+				let preloadRadius = isIOS ? 5 : (width < 768) ? 10 : 20;
 				
 				// Prioritize forward loading (direction of auto-play)
 				for (let i = 0; i <= preloadRadius; i++) {
@@ -498,6 +547,24 @@ function draw() {
 		let uiDims = getDisplayDimensions(img.width, img.height);
 		
 		image(img, uiDims.offsetX, uiDims.offsetY, uiDims.displayWidth, uiDims.displayHeight);
+		
+		// Preload videos when user is in p1 or p2 state (before they need them)
+		if (currentUIState === 'p1' || currentUIState === 'p2') {
+			if (!video3 && !video3Loaded) {
+				video3 = setupVideo('img/video3.mp4', () => { video3Loaded = true; });
+			}
+			if (!video5 && !video5Loaded) {
+				video5 = setupVideo('img/video5.mp4', () => { video5Loaded = true; });
+			}
+		}
+		if (currentUIState === 'p2' || currentUIState === 'p3') {
+			if (!video2 && !video2Loaded) {
+				video2 = setupVideo('img/video2.mp4', () => { video2Loaded = true; });
+			}
+			if (!reverseVideo2 && !reverseVideo2Loaded) {
+				reverseVideo2 = setupVideo('img/reversevideo2.mp4', () => { reverseVideo2Loaded = true; });
+			}
+		}
 		
 		// Render button press effects in UI mode
 		if (buttonPressed) {
@@ -1328,11 +1395,30 @@ function keyReleased() {
 }
 
 function windowResized() {
-	resizeCanvas(windowWidth, windowHeight);
-	noiseGfx = createGraphics(windowWidth, windowHeight);
+	let w = window.innerWidth;
+	let h = window.innerHeight;
+	resizeCanvas(w, h);
+	
+	// Recreate noise graphics with new size
+	if (noiseGfx) {
+		noiseGfx.remove();
+	}
+	noiseGfx = createGraphics(w, h);
 	noiseGfx.pixelDensity(1);
+	
 	// Clear dimension cache to force recalculation
 	cachedDims = null;
+	
+	// On iOS, clear some cached frames to free memory
+	let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+	if (isIOS && video4Frames.length > 50) {
+		// Keep only nearby frames
+		for (let i = 0; i < video4Frames.length; i++) {
+			if (Math.abs(i - video4CurrentFrame) > 10 && video4Frames[i]) {
+				video4Frames[i] = null;
+			}
+		}
+	}
 }
 
 // Film noise optimization
@@ -1341,7 +1427,8 @@ let cachedNoiseFrame = null;
 
 function drawFilmNoise() {
 	// Reduce noise generation frequency on mobile for better performance
-	const updateFrequency = (width < 768) ? 2 : 1;
+	let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+	const updateFrequency = isIOS ? 4 : (width < 768) ? 2 : 1;
 	
 	if (noiseFrameCounter % updateFrequency === 0) {
 		noiseGfx.clear();
