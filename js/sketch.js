@@ -67,11 +67,15 @@ let video4IsUserInteracting = false; // Track if user is holding mouse/touch
 let video4UpKeyHeld = false; // Track if up arrow is held
 let video4DownKeyHeld = false; // Track if down arrow is held
 let video4LastKeyScrubTime = 0;
+let video4LastWheelTime = 0; // Throttle wheel events
+let video4LastTouchMoveTime = 0; // Throttle touch move events
 const video4ScrollSpeed = 0.02; // Frames per scroll unit
 const video4MinFrameInterval = 50; // Min 50ms between updates
 let video4AutoPlaySpeed = 100; // ms per frame for auto-play (adjusted for iOS)
 const video4AutoPlayDelay = 1000; // Wait 1s after scroll before auto-playing
 const video4KeyScrubSpeed = 50; // ms per frame when holding arrow key (faster than auto-play)
+const video4WheelThrottle = 16; // Min 16ms between wheel updates (~60fps)
+const video4TouchMoveThrottle = 32; // Min 32ms between touch updates on iOS (~30fps)
 
 function preload() {
 	// Setup all videos - only load essential ones initially
@@ -402,7 +406,9 @@ function draw() {
 	// Render reversevideo2
 	if (playingReverseVideo2) {
 		if (reverseVideo2Loaded && reverseVideo2) {
-			image(reverseVideo2, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+			// Calculate fresh dimensions for reverseVideo2
+			let reverseVideo2Dims = getDisplayDimensions(reverseVideo2.width, reverseVideo2.height);
+			image(reverseVideo2, reverseVideo2Dims.offsetX, reverseVideo2Dims.offsetY, reverseVideo2Dims.displayWidth, reverseVideo2Dims.displayHeight);
 			
 			if (reverseVideo2.time() >= reverseVideo2.duration()) {
 				reverseVideo2.pause();
@@ -420,7 +426,9 @@ function draw() {
 	// Render video5 (exit transition from video4)
 	if (playingVideo5) {
 		if (video5Loaded && video5) {
-			image(video5, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+			// Calculate fresh dimensions for video5
+			let video5Dims = getDisplayDimensions(video5.width, video5.height);
+			image(video5, video5Dims.offsetX, video5Dims.offsetY, video5Dims.displayWidth, video5Dims.displayHeight);
 			
 			if (video5.time() >= video5.duration()) {
 				video5.pause();
@@ -480,9 +488,14 @@ function draw() {
 			// iOS: Aggressively clean up distant frames to prevent memory crashes
 			let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 			if (isIOS) {
+				// Calculate scroll speed to determine cleanup aggressiveness
+				let frameDiff = Math.abs(frameIndex - video4PrevFrame);
+				let isFastScrolling = frameDiff > 2;
+				let cleanupRadius = isFastScrolling ? 3 : 5;
+				
 				// Every frame, clean up frames far from current position
 				for (let i = 0; i < video4Frames.length; i++) {
-					if (video4Frames[i] && Math.abs(i - frameIndex) > 5) {
+					if (video4Frames[i] && Math.abs(i - frameIndex) > cleanupRadius) {
 						if (video4Frames[i].remove) video4Frames[i].remove();
 						video4Frames[i] = null;
 					}
@@ -491,9 +504,13 @@ function draw() {
 			
 			// Smart preloading: adaptive radius based on device and only load if frame changed
 			if (frameIndex !== video4PrevFrame) {
-				// Extremely small radius on iOS to prevent crashes
+				// Calculate scroll speed to adjust preloading
+				let frameDiff = Math.abs(frameIndex - video4PrevFrame);
+				let isFastScrolling = frameDiff > 2;
+				
+				// Extremely small radius on iOS, even smaller during fast scrolling
 				let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-				let preloadRadius = isIOS ? 3 : (width < 768) ? 8 : 15;
+				let preloadRadius = isIOS ? (isFastScrolling ? 2 : 3) : (width < 768) ? 8 : 15;
 				
 				// Prioritize forward loading (direction of auto-play)
 				for (let i = 0; i <= preloadRadius; i++) {
@@ -557,7 +574,9 @@ function draw() {
 	// Render video3 (entrance transition to video4)
 	if (playingVideo3) {
 		if (video3Loaded && video3) {
-			image(video3, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+			// Calculate fresh dimensions for video3
+			let video3Dims = getDisplayDimensions(video3.width, video3.height);
+			image(video3, video3Dims.offsetX, video3Dims.offsetY, video3Dims.displayWidth, video3Dims.displayHeight);
 			
 			if (video3.time() >= video3.duration()) {
 				video3.pause();
@@ -581,7 +600,9 @@ function draw() {
 	// Render video2 with back button
 	if (playingVideo2) {
 		if (video2Loaded && video2) {
-			image(video2, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+			// Calculate fresh dimensions for video2
+			let video2Dims = getDisplayDimensions(video2.width, video2.height);
+			image(video2, video2Dims.offsetX, video2Dims.offsetY, video2Dims.displayWidth, video2Dims.displayHeight);
 			
 			if (video2.time() >= video2.duration()) {
 				video2.pause();
@@ -912,6 +933,7 @@ function navigateRight() {
 				video3.time(0);
 				video3.play();
 				playingVideo3 = true;
+				cachedDims = null; // Clear cache for video3 dimensions
 			}
 		} else if (currentUIState === 'p3') {
 			showingUI = false;
@@ -926,6 +948,7 @@ function navigateRight() {
 				video2.time(0);
 				video2.play();
 				playingVideo2 = true;
+				cachedDims = null; // Clear cache for video2 dimensions
 			}
 		}
 	} else {
@@ -983,6 +1006,7 @@ function handleBackButtonClick(x, y) {
 				reverseVideo2.time(0);
 				reverseVideo2.play();
 				playingReverseVideo2 = true;
+				cachedDims = null; // Clear cache for reverseVideo2 dimensions
 			}
 			return true;
 		}
@@ -1001,6 +1025,7 @@ function handleBackButtonClick(x, y) {
 				video5.time(0);
 				video5.play();
 				playingVideo5 = true;
+				cachedDims = null; // Clear cache for video5 dimensions
 			}
 			return true;
 		}
@@ -1156,12 +1181,18 @@ function mouseReleased() {
 }
 
 function mouseWheel(event) {
-	// Handle video4 scrolling
+	// Handle video4 scrolling with throttling
 	if (playingVideo4 && video4Loaded) {
+		let currentTime = millis();
+		if (currentTime - video4LastWheelTime < video4WheelThrottle) {
+			return false; // Throttle updates
+		}
+		video4LastWheelTime = currentTime;
+		
 		// Update frame position
 		video4CurrentFrame += event.delta * video4ScrollSpeed;
 		video4CurrentFrame = constrain(video4CurrentFrame, 0, video4FrameCount - 1);
-		video4LastScrollTime = millis(); // Track scroll time to pause auto-play
+		video4LastScrollTime = currentTime; // Track scroll time to pause auto-play
 		return false; // Prevent page scroll
 	}
 }
@@ -1180,14 +1211,29 @@ function touchStarted() {
 }
 
 function touchMoved() {
-	// Handle video4 scrolling on mobile
+	// Handle video4 scrolling on mobile with throttling and speed limiting
 	if (playingVideo4 && video4Loaded && touches && touches.length > 0) {
+		let currentTime = millis();
+		if (currentTime - video4LastTouchMoveTime < video4TouchMoveThrottle) {
+			return false; // Throttle updates more aggressively on mobile
+		}
+		video4LastTouchMoveTime = currentTime;
+		
 		let deltaY = lastTouchYForScroll - touches[0].y;
+		
+		// Limit scroll speed on iOS to prevent crashes
+		let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+		let scrollMultiplier = isIOS ? 0.1 : 0.2; // Slower on iOS
+		let maxDelta = isIOS ? 10 : 20; // Cap maximum frame jump on iOS
+		
+		// Clamp delta to prevent huge jumps
+		let clampedDelta = constrain(deltaY * scrollMultiplier, -maxDelta, maxDelta);
+		
 		// Update frame position
-		video4CurrentFrame += deltaY * 0.2;
+		video4CurrentFrame += clampedDelta;
 		video4CurrentFrame = constrain(video4CurrentFrame, 0, video4FrameCount - 1);
 		lastTouchYForScroll = touches[0].y;
-		video4LastScrollTime = millis(); // Track scroll time to pause auto-play
+		video4LastScrollTime = currentTime; // Track scroll time to pause auto-play
 		return false; // Prevent page scroll
 	}
 }
