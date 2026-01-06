@@ -196,7 +196,7 @@ function setup() {
 			noiseGfx = createGraphics(window.innerWidth, window.innerHeight);
 			noiseGfx.pixelDensity(1);
 			cachedDims = null;
-		}, 100);
+		}, 400);
 	});
 	
 	// Enable audio on iOS with user interaction
