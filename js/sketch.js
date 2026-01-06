@@ -940,8 +940,8 @@ function handleButtonRelease(x, y) {
 
 // Helper: Handle arrow button navigation
 function handleArrowNavigation(x, y) {
-	// Don't allow arrow navigation during transition videos
-	if (playingReverseVideo || playingReverseVideo2 || playingVideo3 || playingVideo4 || playingVideo5) return;
+	// Don't allow arrow navigation during transition videos or video2
+	if (playingReverseVideo || playingReverseVideo2 || playingVideo2 || playingVideo3 || playingVideo4 || playingVideo5) return;
 	
 	let bounds = getButtonBounds();
 	if (bounds.frame < 30) return;
