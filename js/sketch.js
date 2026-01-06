@@ -1022,9 +1022,9 @@ function handleBackButtonClick(x, y) {
 	// Check video2 back button
 	if (playingVideo2 && video2.time() >= video2.duration()) {
 		let smallestSide = min(width, height);
-		let btnSize = smallestSide / 6;
-		let btnX = width - btnSize - 20;
-		let btnY = height - btnSize - 20;
+		let btnSize = smallestSide / 5;
+		let btnX = width - btnSize - 30;
+		let btnY = height - btnSize - 90;
 		
 		if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
 			playSound(ticlicSound, 0.4);
@@ -1041,9 +1041,9 @@ function handleBackButtonClick(x, y) {
 	// Check video4 back button (frame-based)
 	if (playingVideo4) {
 		let smallestSide = min(width, height);
-		let btnSize = smallestSide / 6;
-		let btnX = width - btnSize - 20;
-		let btnY = height - btnSize - 20;
+		let btnSize = smallestSide / 5;
+		let btnX = width - btnSize - 30;
+		let btnY = height - btnSize - 90;
 		
 		if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
 			playSound(ticlicSound, 0.4);
