@@ -572,9 +572,9 @@ function draw() {
 		// Draw back button while video4 is playing (but not when video5 is playing)
 		if (!playingVideo5 && backUI0Img && backUIImg) {
 			let smallestSide = min(width, height);
-			let btnSize = smallestSide / 6;
-			let btnX = width - btnSize - 20;
-			let btnY = height - btnSize - 20;
+			let btnSize = smallestSide / 5;
+			let btnX = width - btnSize - 30;
+			let btnY = height - btnSize - 90;
 			
 			let isHovered = mouseX >= btnX && mouseX <= btnX + btnSize &&
 			                mouseY >= btnY && mouseY <= btnY + btnSize;
@@ -629,9 +629,9 @@ function draw() {
 		// Draw back button when video2 is frozen (but not when reverseVideo2 is playing)
 		if (video2.time() >= video2.duration() && !playingReverseVideo2 && backUI0Img && backUIImg) {
 			let smallestSide = min(width, height);
-			let btnSize = smallestSide / 6;
-			let btnX = width - btnSize - 20;
-			let btnY = height - btnSize - 20;
+			let btnSize = smallestSide / 5;
+			let btnX = width - btnSize - 30;
+			let btnY = height - btnSize - 90;
 			
 			let isHovered = mouseX >= btnX && mouseX <= btnX + btnSize &&
 			                mouseY >= btnY && mouseY <= btnY + btnSize;
