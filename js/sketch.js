@@ -87,6 +87,11 @@ let keyboardArrowPressed = -1; // -1 = none, 0=down, 1=left, 2=up, 3=right
 let spaceKeyPressed = false; // Track spacebar for button
 let enterKeyPressed = false; // Track enter key for button
 
+// Button click cooldown (prevent spam/double clicks)
+let lastButtonClickTime = 0;
+let lastArrowClickTime = 0; // Separate cooldown for arrow buttons
+const BUTTON_CLICK_COOLDOWN = 50; // 50ms between clicks
+
 
 // Video4 scroll control
 let video4ScrollPosition = 0;
@@ -195,6 +200,11 @@ function setup() {
 	let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 	let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
 	
+	// Constrain canvas aspect ratio to 16:9 (landscape) or 9:16 (portrait)
+	let constrainedDims = constrainAspectRatio(w, h);
+	w = constrainedDims.width;
+	h = constrainedDims.height;
+	
 	// Ensure dimensions are reasonable (prevent GPU issues with extreme sizes)
 	w = Math.min(w, 4096);
 	h = Math.min(h, 4096);
@@ -239,10 +249,15 @@ function setup() {
 	canvas.parent(document.body);
 	canvas.style('display', 'block');
 	canvas.style('position', 'fixed');
-	canvas.style('top', '0');
-	canvas.style('left', '0');
+	canvas.style('top', '50%');
+	canvas.style('left', '50%');
+	canvas.style('transform', 'translate(-50%, -50%)');
 	canvas.style('margin', '0');
 	canvas.style('padding', '0');
+	
+	// Apply black background to body for bars
+	document.body.style.backgroundColor = '#000000';
+	
 	applyNoSmoothing();
 	
 	// Optimize for iOS devices
@@ -264,6 +279,11 @@ function setup() {
 		checkCount++;
 		let currentW = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 		let currentH = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+		
+		// Constrain aspect ratio
+		let constrainedDims = constrainAspectRatio(currentW, currentH);
+		currentW = constrainedDims.width;
+		currentH = constrainedDims.height;
 		
 		// Fix if dimensions are wrong or aspect ratio is way off
 		if (Math.abs(width - currentW) > 10 || Math.abs(height - currentH) > 10) {
@@ -302,7 +322,8 @@ function setup() {
 		setTimeout(() => {
 			let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 			let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
-			resizeCanvas(w, h);
+			let constrainedDims = constrainAspectRatio(w, h);
+			resizeCanvas(constrainedDims.width, constrainedDims.height);
 			cachedDims = null;
 			applyNoSmoothing();
 		}, 400);
@@ -405,6 +426,33 @@ function setupVideo(videoPath, onLoadCallback) {
 	}
 	
 	return vid;
+}
+
+// Helper function: Constrain aspect ratio to 16:9 or 9:16 max
+function constrainAspectRatio(viewportWidth, viewportHeight) {
+	const MAX_LANDSCAPE_RATIO = 16 / 9;  // 1.778
+	const MAX_PORTRAIT_RATIO = 9 / 16;   // 0.5625
+	
+	let currentRatio = viewportWidth / viewportHeight;
+	let width = viewportWidth;
+	let height = viewportHeight;
+	
+	// Landscape mode: constrain to max 16:9
+	if (currentRatio > 1) {
+		if (currentRatio > MAX_LANDSCAPE_RATIO) {
+			// Too wide, constrain width
+			width = height * MAX_LANDSCAPE_RATIO;
+		}
+	}
+	// Portrait mode: constrain to max 9:16
+	else {
+		if (currentRatio < MAX_PORTRAIT_RATIO) {
+			// Too tall, constrain height
+			height = width / MAX_PORTRAIT_RATIO;
+		}
+	}
+	
+	return { width: Math.round(width), height: Math.round(height) };
 }
 
 // Helper function: Load video on demand
@@ -1441,7 +1489,27 @@ function handleBackButtonClick(x, y) {
 			
 			if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
 				playSound(ticlicSound, 0.4);
-				window.open(currentLink, '_blank');
+				
+				// iOS-friendly link opening with confirmation
+				let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+				if (isIOS) {
+					// Use confirm dialog to ensure user action, then navigate
+					if (confirm('Open link in new tab?\n\n' + currentLink)) {
+						// Try window.open first
+						let newWindow = window.open(currentLink, '_blank');
+						// Fallback: direct navigation if popup blocked
+						if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+							window.location.href = currentLink;
+						}
+					}
+				} else {
+					// Standard browser behavior
+					let newWindow = window.open(currentLink, '_blank');
+					// Fallback if blocked
+					if (!newWindow) {
+						window.location.href = currentLink;
+					}
+				}
 				return true;
 			}
 		}
@@ -1494,7 +1562,16 @@ function handleBackButtonClick(x, y) {
 
 // Helper: Handle button press start
 function handleButtonPressStart(x, y) {
-	if (handleBackButtonClick(x, y)) return;
+	// Check cooldown to prevent spam/double clicks
+	let currentTime = millis();
+	if (currentTime - lastButtonClickTime < BUTTON_CLICK_COOLDOWN) {
+		return;
+	}
+	
+	if (handleBackButtonClick(x, y)) {
+		lastButtonClickTime = currentTime;
+		return;
+	}
 	
 	// Don't allow button press when transition videos are playing
 	if (playingReverseVideo || playingReverseVideo2 || playingVideo2 || playingVideo3 || playingVideo5) return;
@@ -1509,6 +1586,7 @@ function handleButtonPressStart(x, y) {
 	if (canPressButton && isInsideButton(x, y)) {
 		playClickSound();
 		buttonPressed = true;
+		lastButtonClickTime = currentTime;
 	}
 	
 	// Handle arrow button press (only when not in video2)
@@ -1525,6 +1603,13 @@ function handleButtonPressStart(x, y) {
 
 // Helper: Handle button release
 function handleButtonRelease(x, y) {
+	// Check cooldown to prevent spam/double clicks
+	let currentTime = millis();
+	if (currentTime - lastButtonClickTime < BUTTON_CLICK_COOLDOWN) {
+		buttonPressed = false;
+		return;
+	}
+	
 	// Don't allow button release during transition videos
 	if (playingReverseVideo || playingReverseVideo2 || playingVideo3 || playingVideo4 || playingVideo5) {
 		buttonPressed = false;
@@ -1544,6 +1629,8 @@ function handleButtonRelease(x, y) {
 		buttonPressed = false;
 		return;
 	}
+	
+	lastButtonClickTime = currentTime; // Update cooldown timer
 	
 	// Starting from first frame state
 	if (waitingForButtonClick) {
@@ -1610,8 +1697,17 @@ function handleArrowNavigation(x, y) {
 	
 	let arrowIdx = isInsideArrowButton(x, y);
 	if (arrowIdx !== -1) {
+		// Check cooldown to prevent spam/double clicks (only at release)
+		let currentTime = millis();
+		if (currentTime - lastArrowClickTime < BUTTON_CLICK_COOLDOWN) {
+			return;
+		}
+		
 		// Always play release sound
 		playSound(ticlicSound, 0.4, 0.8);
+		
+		// Update cooldown timer after release
+		lastArrowClickTime = currentTime;
 		
 		// Only navigate if we're in UI mode (video has ended)
 		if (showingUI) {
@@ -1984,7 +2080,10 @@ function keyReleased() {
 function windowResized() {
 	let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 	let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
-	resizeCanvas(w, h);
+	
+	// Constrain aspect ratio
+	let constrainedDims = constrainAspectRatio(w, h);
+	resizeCanvas(constrainedDims.width, constrainedDims.height);
 	
 	// Clear dimension cache to force recalculation
 	cachedDims = null;
