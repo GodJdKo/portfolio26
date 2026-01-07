@@ -97,6 +97,16 @@ const video4KeyScrubSpeed = 50; // ms per frame when holding arrow key (faster t
 const video4WheelThrottle = 16; // Min 16ms between wheel updates (~60fps)
 const video4TouchMoveThrottle = 32; // Min 32ms between touch updates on iOS (~30fps)
 
+// Resource management - track last use times for cleanup
+let lastVideo2Use = 0;
+let lastVideo3Use = 0;
+let lastVideo5Use = 0;
+let lastReverseVideo2Use = 0;
+let video4FrameLastUse = []; // Track last use time for each frame
+let lastCleanupTime = 0;
+const RESOURCE_TIMEOUT = 5000; // Unload resources after 5 seconds of non-use
+const CLEANUP_INTERVAL = 1000; // Run cleanup every second
+
 function preload() {
 	// Setup all videos - only load essential ones initially
 	video = setupVideo('img/video.mp4', () => {
@@ -399,10 +409,97 @@ function drawNoise(dims) {
 	}
 }
 
+// Helper: Clean up unused resources to free memory
+function cleanupUnusedResources() {
+	let currentTime = millis();
+	
+	// Only run cleanup every CLEANUP_INTERVAL
+	if (currentTime - lastCleanupTime < CLEANUP_INTERVAL) return;
+	lastCleanupTime = currentTime;
+	
+	let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+	
+	// Determine which videos are needed for current state (to avoid premature unloading)
+	let needsVideo2 = (currentUIState === 'p2' || currentUIState === 'p3') || playingVideo2;
+	let needsReverseVideo2 = (currentUIState === 'p2' || currentUIState === 'p3') || playingReverseVideo2;
+	let needsVideo3 = (currentUIState === 'p1' || currentUIState === 'p2') || playingVideo3;
+	let needsVideo5 = (currentUIState === 'p1' || currentUIState === 'p2') || playingVideo5;
+	
+	// Unload video2 only if not needed and not used recently
+	if (video2 && !needsVideo2 && currentTime - lastVideo2Use > RESOURCE_TIMEOUT) {
+		if (video2.elt) {
+			video2.elt.pause();
+			video2.elt.removeAttribute('src');
+			video2.remove();
+		}
+		video2 = null;
+		video2Loaded = false;
+	}
+	
+	// Unload reverseVideo2 only if not needed and not used recently
+	if (reverseVideo2 && !needsReverseVideo2 && currentTime - lastReverseVideo2Use > RESOURCE_TIMEOUT) {
+		if (reverseVideo2.elt) {
+			reverseVideo2.elt.pause();
+			reverseVideo2.elt.removeAttribute('src');
+			reverseVideo2.remove();
+		}
+		reverseVideo2 = null;
+		reverseVideo2Loaded = false;
+	}
+	
+	// Unload video3 only if not needed and not used recently
+	if (video3 && !needsVideo3 && currentTime - lastVideo3Use > RESOURCE_TIMEOUT) {
+		if (video3.elt) {
+			video3.elt.pause();
+			video3.elt.removeAttribute('src');
+			video3.remove();
+		}
+		video3 = null;
+		video3Loaded = false;
+	}
+	
+	// Unload video5 only if not needed and not used recently
+	if (video5 && !needsVideo5 && currentTime - lastVideo5Use > RESOURCE_TIMEOUT) {
+		if (video5.elt) {
+			video5.elt.pause();
+			video5.elt.removeAttribute('src');
+			video5.remove();
+		}
+		video5 = null;
+		video5Loaded = false;
+	}
+	
+	// Clean up video4 frames not used recently (more aggressive on iOS)
+	if (playingVideo4) {
+		let frameIndex = floor(constrain(video4CurrentFrame, 0, video4FrameCount - 1));
+		let frameTimeout = isIOS ? 2000 : 5000; // 2s on iOS, 5s elsewhere
+		let keepRadius = isIOS ? 2 : 10; // Keep fewer frames on iOS
+		
+		for (let i = 0; i < video4FrameCount; i++) {
+			if (video4Frames[i] && i !== frameIndex && i !== video4LastDisplayedFrame) {
+				// Clean up frames outside radius and not recently used
+				let outsideRadius = Math.abs(i - frameIndex) > keepRadius;
+				let notRecentlyUsed = video4FrameLastUse[i] && currentTime - video4FrameLastUse[i] > frameTimeout;
+				
+				if (outsideRadius && notRecentlyUsed) {
+					try {
+						if (video4Frames[i].remove) video4Frames[i].remove();
+					} catch(e) {}
+					video4Frames[i] = null;
+					video4FrameLastUse[i] = 0;
+				}
+			}
+		}
+	}
+}
+
 function draw() {
 	// WebGL setup
 	noSmooth();
 	background(0);
+	
+	// Clean up unused resources periodically
+	cleanupUnusedResources();
 	
 	// Reset WebGL transformations and use 2D-style coordinates
 	push();
@@ -442,6 +539,7 @@ function draw() {
 	
 	// Render reversevideo2
 	if (playingReverseVideo2) {
+		lastReverseVideo2Use = millis();
 		if (reverseVideo2Loaded && reverseVideo2) {
 			// Calculate fresh dimensions for reverseVideo2
 			let reverseVideo2Dims = getDisplayDimensions(reverseVideo2.width, reverseVideo2.height);
@@ -462,6 +560,7 @@ function draw() {
 	
 	// Render video5 (exit transition from video4)
 	if (playingVideo5) {
+		lastVideo5Use = millis();
 		if (video5Loaded && video5) {
 			// Calculate fresh dimensions for video5
 			let video5Dims = getDisplayDimensions(video5.width, video5.height);
@@ -586,9 +685,11 @@ function draw() {
 			if (video4Frames[frameIndex] && video4Frames[frameIndex].width > 0) {
 				image(video4Frames[frameIndex], dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
 				video4LastDisplayedFrame = frameIndex;
+				video4FrameLastUse[frameIndex] = millis();
 			} else if (video4Frames[video4LastDisplayedFrame] && video4Frames[video4LastDisplayedFrame].width > 0) {
 				// Show last successfully displayed frame while new one loads
 				image(video4Frames[video4LastDisplayedFrame], dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+				video4FrameLastUse[video4LastDisplayedFrame] = millis();
 			}
 		}
 		
@@ -612,6 +713,7 @@ function draw() {
 	
 	// Render video3 (entrance transition to video4)
 	if (playingVideo3) {
+		lastVideo3Use = millis();
 		if (video3Loaded && video3) {
 			// Calculate fresh dimensions for video3
 			let video3Dims = getDisplayDimensions(video3.width, video3.height);
@@ -638,6 +740,7 @@ function draw() {
 	
 	// Render video2 with back button
 	if (playingVideo2) {
+		lastVideo2Use = millis();
 		if (video2Loaded && video2) {
 			// Calculate fresh dimensions for video2
 			let video2Dims = getDisplayDimensions(video2.width, video2.height);
@@ -682,17 +785,21 @@ function draw() {
 		if (currentUIState === 'p1' || currentUIState === 'p2') {
 			if (!video3 && !video3Loaded) {
 				video3 = setupVideo('img/video3.mp4', () => { video3Loaded = true; });
+				lastVideo3Use = millis();
 			}
 			if (!video5 && !video5Loaded) {
 				video5 = setupVideo('img/video5.mp4', () => { video5Loaded = true; });
+				lastVideo5Use = millis();
 			}
 		}
 		if (currentUIState === 'p2' || currentUIState === 'p3') {
 			if (!video2 && !video2Loaded) {
 				video2 = setupVideo('img/video2.mp4', () => { video2Loaded = true; });
+				lastVideo2Use = millis();
 			}
 			if (!reverseVideo2 && !reverseVideo2Loaded) {
 				reverseVideo2 = setupVideo('img/reversevideo2.mp4', () => { reverseVideo2Loaded = true; });
+				lastReverseVideo2Use = millis();
 			}
 		}
 		
@@ -974,14 +1081,17 @@ function navigateRight() {
 			// Load video3 and video5 on-demand when needed
 			if (!video3) {
 				video3 = setupVideo('img/video3.mp4', () => { video3Loaded = true; });
+				lastVideo3Use = millis();
 			}
 			if (!video5) {
 				video5 = setupVideo('img/video5.mp4', () => { video5Loaded = true; });
+				lastVideo5Use = millis();
 			}
 			if (video3Loaded && video3) {
 				video3.time(0);
 				video3.play();
 				playingVideo3 = true;
+				lastVideo3Use = millis();
 				cachedDims = null; // Clear cache for video3 dimensions
 			}
 		} else if (currentUIState === 'p3') {
@@ -989,14 +1099,17 @@ function navigateRight() {
 			// Load video2 and reverseVideo2 on-demand when needed
 			if (!video2) {
 				video2 = setupVideo('img/video2.mp4', () => { video2Loaded = true; });
+				lastVideo2Use = millis();
 			}
 			if (!reverseVideo2) {
 				reverseVideo2 = setupVideo('img/reversevideo2.mp4', () => { reverseVideo2Loaded = true; });
+				lastReverseVideo2Use = millis();
 			}
 			if (video2Loaded && video2) {
 				video2.time(0);
 				video2.play();
 				playingVideo2 = true;
+				lastVideo2Use = millis();
 				cachedDims = null; // Clear cache for video2 dimensions
 			}
 		}
