@@ -27,6 +27,7 @@ function requestFullscreen() {
 let btnPressedImg, lightMaskImg, backUI0Img, backUIImg;
 let uiImages = {};
 let firstFrameImages = [];
+let noiseImages = [];
 
 // Video elements and states
 let video, reverseVideo, video2, reverseVideo2, video3, video5;
@@ -136,6 +137,11 @@ function preload() {
 	// Load first frame animation images
 	for (let i = 0; i < 5; i++) {
 		firstFrameImages[i] = loadImage(`img/firstframe/firstframe${i}.jpg`);
+	}
+	
+	// Load noise images
+	for (let i = 1; i <= 4; i++) {
+		noiseImages[i - 1] = loadImage(`img/noise/noise${i}.png`);
 	}
 }
 
@@ -381,6 +387,18 @@ function getButtonBounds() {
 let cachedDims = null;
 let lastCanvasSize = { w: 0, h: 0 };
 
+// Helper: Draw random noise overlay
+function drawNoise(dims) {
+	if (noiseImages.length > 0) {
+		let randomNoise = noiseImages[floor(random(noiseImages.length))];
+		if (randomNoise) {
+			blendMode(MULTIPLY);
+			image(randomNoise, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+			blendMode(BLEND);
+		}
+	}
+}
+
 function draw() {
 	// WebGL setup
 	noSmooth();
@@ -418,6 +436,7 @@ function draw() {
 				waitingForButtonClick = true;
 			}
 		}
+		drawNoise(dims);
 		return;
 	}
 	
@@ -436,6 +455,7 @@ function draw() {
 				currentUIState = 'p3';
 				showingUI = true;
 			}
+			drawNoise(reverseVideo2Dims);
 		}
 		return;
 	}
@@ -465,6 +485,7 @@ function draw() {
 					isPlaying = false;
 				}
 			}
+			drawNoise(video5Dims);
 		}
 		return;
 	}
@@ -501,18 +522,18 @@ function draw() {
 			// Get current frame index
 			let frameIndex = floor(constrain(video4CurrentFrame, 0, video4FrameCount - 1));
 			
-			// iOS: Aggressively clean up distant frames to prevent memory crashes
+			// iOS: VERY aggressively clean up frames to prevent memory crashes
 			let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 			if (isIOS) {
-				// Calculate scroll speed to determine cleanup aggressiveness
-				let frameDiff = Math.abs(frameIndex - video4PrevFrame);
-				let isFastScrolling = frameDiff > 2;
-				let cleanupRadius = isFastScrolling ? 3 : 5;
+				// Keep only 1-2 frames around current position
+				let cleanupRadius = 1;
 				
-				// Every frame, clean up frames far from current position
-				for (let i = 0; i < video4Frames.length; i++) {
+				// Clean up ALL frames except immediate neighbors
+				for (let i = 0; i < video4FrameCount; i++) {
 					if (video4Frames[i] && Math.abs(i - frameIndex) > cleanupRadius) {
-						if (video4Frames[i].remove) video4Frames[i].remove();
+						try {
+							if (video4Frames[i].remove) video4Frames[i].remove();
+						} catch(e) {}
 						video4Frames[i] = null;
 					}
 				}
@@ -526,7 +547,7 @@ function draw() {
 				
 				// Extremely small radius on iOS, even smaller during fast scrolling
 				let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-				let preloadRadius = isIOS ? (isFastScrolling ? 2 : 3) : (width < 768) ? 8 : 15;
+				let preloadRadius = isIOS ? 1 : (width < 768) ? 8 : 15;
 				
 				// Prioritize forward loading (direction of auto-play)
 				for (let i = 0; i <= preloadRadius; i++) {
@@ -546,13 +567,15 @@ function draw() {
 					}
 				}
 				
-				// Load behind (smaller radius)
-				let backRadius = Math.floor(preloadRadius / 2);
-				for (let i = 1; i <= backRadius; i++) {
-					let preloadIndex = frameIndex - i;
-					if (preloadIndex >= 0 && preloadIndex < video4FrameCount && !video4Frames[preloadIndex]) {
-						let frameNum = nf(preloadIndex, 3);
-						video4Frames[preloadIndex] = loadImage(`img/video4/video4-${frameNum}.jpg`);
+				// Load behind (smaller radius) - skip on iOS to save memory
+				if (!isIOS) {
+					let backRadius = Math.floor(preloadRadius / 2);
+					for (let i = 1; i <= backRadius; i++) {
+						let preloadIndex = frameIndex - i;
+						if (preloadIndex >= 0 && preloadIndex < video4FrameCount && !video4Frames[preloadIndex]) {
+							let frameNum = nf(preloadIndex, 3);
+							video4Frames[preloadIndex] = loadImage(`img/video4/video4-${frameNum}.jpg`);
+						}
 					}
 				}
 				
@@ -583,6 +606,7 @@ function draw() {
 			image(isHovered ? backUIImg : backUI0Img, btnX, btnY, btnSize, btnSize);
 		}
 		
+		drawNoise(dims);
 		return;
 	}
 	
@@ -607,6 +631,7 @@ function draw() {
 					video4LastScrollTime = 0;
 				}
 			}
+			drawNoise(video3Dims);
 		}
 		return;
 	}
@@ -639,6 +664,10 @@ function draw() {
 			image(isHovered ? backUIImg : backUI0Img, btnX, btnY, btnSize, btnSize);
 		}
 		
+		if (video2Loaded && video2) {
+			let video2Dims = getDisplayDimensions(video2.width, video2.height);
+			drawNoise(video2Dims);
+		}
 		return;
 	}
 	
@@ -675,6 +704,7 @@ function draw() {
 		// Render arrow button press effects
 		renderArrowButtonEffects(uiDims);
 		
+		drawNoise(uiDims);
 		return;
 	}
 	
@@ -686,6 +716,7 @@ function draw() {
 		textSize(16);
 		text("Loading...", 0, 0); // WebGL center
 		pop();
+		drawNoise(dims);
 		pop(); // Close main transformation
 		return;
 	}
@@ -712,6 +743,7 @@ function draw() {
 		let bounds = getButtonBounds();
 		document.body.style.cursor = (mouseX >= bounds.x && mouseX <= bounds.x + bounds.w &&
 		                              mouseY >= bounds.y && mouseY <= bounds.y + bounds.h) ? 'pointer' : 'default';
+		drawNoise(dims);
 		return;
 	}
 	
@@ -748,6 +780,7 @@ function draw() {
 		renderArrowButtonEffects(dims);
 	}
 	
+	drawNoise(dims);
 	pop(); // Close WebGL transformation
 }
 
@@ -1018,6 +1051,7 @@ function handleBackButtonClick(x, y) {
 		
 		if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
 			playSound(ticlicSound, 0.4);
+			document.body.style.cursor = 'default';
 			if (reverseVideo2Loaded && reverseVideo2) {
 				reverseVideo2.time(0);
 				reverseVideo2.play();
@@ -1037,6 +1071,7 @@ function handleBackButtonClick(x, y) {
 		
 		if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
 			playSound(ticlicSound, 0.4);
+			document.body.style.cursor = 'default';
 			if (video5Loaded && video5) {
 				video5.time(0);
 				video5.play();
