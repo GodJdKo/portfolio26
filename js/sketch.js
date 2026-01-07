@@ -557,12 +557,11 @@ function draw() {
 				showingUI = true;
 			}
 			drawNoise(reverseVideo2Dims);
-		} else if (uiImages[currentUIState]) {
-			// Fallback: show UI while reverseVideo2 loads
-			let img = uiImages[currentUIState];
-			let uiDims = getDisplayDimensions(img.width, img.height);
-			image(img, uiDims.offsetX, uiDims.offsetY, uiDims.displayWidth, uiDims.displayHeight);
-			drawNoise(uiDims);
+		} else if (video2Loaded && video2) {
+			// Fallback: show frozen frame of video2 while reverseVideo2 loads
+			let video2Dims = getDisplayDimensions(video2.width, video2.height);
+			image(video2, video2Dims.offsetX, video2Dims.offsetY, video2Dims.displayWidth, video2Dims.displayHeight);
+			drawNoise(video2Dims);
 		}
 		return;
 	}
@@ -634,15 +633,36 @@ function draw() {
 			// Get current frame index
 			let frameIndex = floor(constrain(video4CurrentFrame, 0, video4FrameCount - 1));
 			
-			// iOS: VERY aggressively clean up frames to prevent memory crashes
-			let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-			if (isIOS) {
-				// Keep only 1-2 frames around current position
-				let cleanupRadius = 1;
-				
-				// Clean up ALL frames except immediate neighbors
+		// iOS: EXTREMELY aggressively clean up frames EVERY FRAME to prevent memory crashes
+		let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+		if (isIOS) {
+			// Count loaded frames for debugging
+			let loadedCount = 0;
+			for (let i = 0; i < video4FrameCount; i++) {
+				if (video4Frames[i]) loadedCount++;
+			}
+			
+			// Keep ONLY the current frame and 1 frame ahead - nothing else
+			let keepRadius = 0; // Only current frame
+			
+			// Clean up ALL frames except current and next
+			for (let i = 0; i < video4FrameCount; i++) {
+				if (video4Frames[i] && i !== frameIndex && i !== frameIndex + 1 && i !== video4LastDisplayedFrame) {
+					try {
+						if (video4Frames[i].remove) video4Frames[i].remove();
+					} catch(e) {}
+					video4Frames[i] = null;
+				}
+			}
+			
+			// Hard limit: if more than 3 frames loaded, force cleanup of everything except current
+			loadedCount = 0;
+			for (let i = 0; i < video4FrameCount; i++) {
+				if (video4Frames[i]) loadedCount++;
+			}
+			if (loadedCount > 3) {
 				for (let i = 0; i < video4FrameCount; i++) {
-					if (video4Frames[i] && Math.abs(i - frameIndex) > cleanupRadius) {
+					if (i !== frameIndex && video4Frames[i]) {
 						try {
 							if (video4Frames[i].remove) video4Frames[i].remove();
 						} catch(e) {}
@@ -650,18 +670,29 @@ function draw() {
 					}
 				}
 			}
+		}
+		
+		// Smart preloading: adaptive radius based on device and only load if frame changed
+		if (frameIndex !== video4PrevFrame) {
+			// Extremely small radius on iOS - only preload 1 frame ahead
+			let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+			let preloadRadius = isIOS ? 0 : (width < 768) ? 8 : 15; // iOS: 0 = only load current frame on demand
 			
-			// Smart preloading: adaptive radius based on device and only load if frame changed
-			if (frameIndex !== video4PrevFrame) {
-				// Calculate scroll speed to adjust preloading
-				let frameDiff = Math.abs(frameIndex - video4PrevFrame);
-				let isFastScrolling = frameDiff > 2;
-				
-				// Extremely small radius on iOS, even smaller during fast scrolling
-				let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-				let preloadRadius = isIOS ? 1 : (width < 768) ? 8 : 15;
-				
-				// Prioritize forward loading (direction of auto-play)
+			// On iOS, only load the current frame, nothing ahead
+			if (isIOS) {
+				// Load only current frame if not loaded
+				if (!video4Frames[frameIndex]) {
+					let frameNum = nf(frameIndex, 3);
+					video4Frames[frameIndex] = loadImage(`img/video4/video4-${frameNum}.jpg`);
+				}
+				// Load 1 frame ahead only
+				let nextFrame = frameIndex + 1;
+				if (nextFrame < video4FrameCount && !video4Frames[nextFrame]) {
+					let frameNum = nf(nextFrame, 3);
+					video4Frames[nextFrame] = loadImage(`img/video4/video4-${frameNum}.jpg`);
+				}
+			} else {
+				// Desktop: normal preloading
 				for (let i = 0; i <= preloadRadius; i++) {
 					let preloadIndex = frameIndex + i;
 					if (preloadIndex >= 0 && preloadIndex < video4FrameCount && !video4Frames[preloadIndex]) {
@@ -679,11 +710,7 @@ function draw() {
 					}
 				}
 				
-				// Load behind (smaller radius) - skip on iOS to save memory
-				if (!isIOS) {
-					let backRadius = Math.floor(preloadRadius / 2);
-					for (let i = 1; i <= backRadius; i++) {
-						let preloadIndex = frameIndex - i;
+				// Load behind (smaller radius)
 						if (preloadIndex >= 0 && preloadIndex < video4FrameCount && !video4Frames[preloadIndex]) {
 							let frameNum = nf(preloadIndex, 3);
 							video4Frames[preloadIndex] = loadImage(`img/video4/video4-${frameNum}.jpg`);
@@ -826,6 +853,22 @@ function draw() {
 				lastReverseVideo2Use = millis();
 			}
 		}
+		
+		// Update cursor for UI buttons and arrows
+		let uiButtonHovered = isInsideButton(mouseX, mouseY);
+		let arrowHovered = false;
+		let scaleFactor = uiDims.displayWidth / videoOriginalWidth;
+		for (let btn of squareButtons) {
+			let btnX = uiDims.offsetX + (btn.x / videoOriginalWidth) * uiDims.displayWidth;
+			let btnY = uiDims.offsetY + (btn.y / videoOriginalHeight) * uiDims.displayHeight;
+			let btnSize = btn.size * scaleFactor;
+			if (mouseX >= btnX && mouseX <= btnX + btnSize &&
+			    mouseY >= btnY && mouseY <= btnY + btnSize) {
+				arrowHovered = true;
+				break;
+			}
+		}
+		document.body.style.cursor = (uiButtonHovered || arrowHovered) ? 'pointer' : 'default';
 		
 		// Render button press effects in UI mode
 		if (buttonPressed) {
@@ -1267,7 +1310,7 @@ function handleButtonRelease(x, y) {
 	
 	// Play clac sound when button is released
 	playSound(clacSound);
-	clacSound.setVolume(1.3);
+	clacSound.setVolume(1.8);
 	
 	// Check if release is inside button area
 	if (!isInsideButton(x, y)) {
@@ -1529,7 +1572,7 @@ function keyReleased() {
 			
 			// Play clac sound
 			playSound(clacSound);
-			clacSound.setVolume(1.3);
+			clacSound.setVolume(1.8);
 			
 			// Starting from first frame state
 			if (waitingForButtonClick) {
@@ -1592,7 +1635,7 @@ function keyReleased() {
 			
 			// Play clac sound
 			playSound(clacSound);
-			clacSound.setVolume(1.3);
+			clacSound.setVolume(1.8);
 			
 			// Starting from first frame state
 			if (waitingForButtonClick) {
