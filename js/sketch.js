@@ -981,11 +981,28 @@ function draw() {
 			// Calculate fresh dimensions for video2
 			let video2Dims = getDisplayDimensions(video2.width, video2.height);
 			
+			// Check if video is frozen at the end
+			let isVideoFrozen = video2.time() >= video2.duration() - 0.1;
+			
+			// Enable smooth rendering when frozen on iOS to preserve text legibility
+			let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+			if (isVideoFrozen && isIOS) {
+				const canvasEl = (mainCanvas && mainCanvas.elt) ? mainCanvas.elt : document.querySelector('canvas');
+				if (canvasEl) {
+					canvasEl.style.setProperty('image-rendering', 'auto');
+				}
+			}
+			
 			// Render video2
 			image(video2, video2Dims.offsetX, video2Dims.offsetY, video2Dims.displayWidth, video2Dims.displayHeight);
 			
+			// Re-apply pixelation after rendering if needed
+			if (isVideoFrozen && isIOS) {
+				applyNoSmoothing();
+			}
+			
 			// Ensure video is paused at end (iPad fix)
-			if (video2.time() >= video2.duration() - 0.1) {
+			if (isVideoFrozen) {
 				video2.pause();
 				video2.time(video2.duration());
 			}
