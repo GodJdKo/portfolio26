@@ -50,6 +50,8 @@ const VIDEO4_IOS_LOAD_COOLDOWN = 90; // ms between starting loads
 let video4IOSDesiredFrame = 0;
 let video4IOSInFlightIndex = -1;
 let video4IOSLastLoadStart = 0;
+let video4IOSCachedIndex = -1;
+let video4IOSCachedImage = null;
 let playingReverseVideo = false;
 let playingVideo2 = false;
 let playingReverseVideo2 = false;
@@ -256,6 +258,20 @@ function setup() {
 			cachedDims = null;
 		}, 400);
 	});
+
+	// Extra resize correction hooks (helps rare stretched boot)
+	document.addEventListener('visibilitychange', () => {
+		if (!document.hidden) triggerSafeResizeSoon();
+	});
+	const oneShotResize = () => {
+		triggerSafeResizeSoon();
+		window.removeEventListener('touchstart', oneShotResize);
+		window.removeEventListener('mousedown', oneShotResize);
+		window.removeEventListener('keydown', oneShotResize);
+	};
+	window.addEventListener('touchstart', oneShotResize, { passive: true });
+	window.addEventListener('mousedown', oneShotResize, { passive: true });
+	window.addEventListener('keydown', oneShotResize, { passive: true });
 	
 	// Enable audio on iOS with user interaction
 	if (isIOS) {
@@ -443,6 +459,27 @@ function downscaleToGraphicsIfNeeded(img, maxDim) {
 	return g;
 }
 
+function resetVideo4IOSCache() {
+	video4IOSDesiredFrame = 0;
+	video4IOSInFlightIndex = -1;
+	video4IOSLastLoadStart = 0;
+	video4IOSCachedIndex = -1;
+	if (video4IOSCachedImage) {
+		disposeVideo4Frame(video4IOSCachedImage);
+		video4IOSCachedImage = null;
+	}
+}
+
+function triggerSafeResizeSoon() {
+	requestAnimationFrame(() => {
+		setTimeout(() => {
+			try {
+				windowResized();
+			} catch (e) {}
+		}, 120);
+	});
+}
+
 // Helper: Clean up unused resources to free memory
 function cleanupUnusedResources() {
 	let currentTime = millis();
@@ -503,11 +540,11 @@ function cleanupUnusedResources() {
 		video5Loaded = false;
 	}
 	
-	// Clean up video4 frames not used recently (more aggressive on iOS)
-	if (playingVideo4) {
+	// Clean up video4 frames not used recently (skip on iOS; iOS uses single-frame cache)
+	if (playingVideo4 && !isIOS) {
 		let frameIndex = floor(constrain(video4CurrentFrame, 0, video4FrameCount - 1));
-		let frameTimeout = isIOS ? 2000 : 5000; // 2s on iOS, 5s elsewhere
-		let keepRadius = isIOS ? 2 : 10; // Keep fewer frames on iOS
+		let frameTimeout = 5000;
+		let keepRadius = 10;
 		
 		for (let i = 0; i < video4FrameCount; i++) {
 			if (video4Frames[i] && i !== frameIndex && i !== video4LastDisplayedFrame) {
@@ -567,6 +604,10 @@ function draw() {
 				waitingForButtonClick = true;
 			}
 		}
+		// Fallback: keep showing the last available main video frame (avoid black flash)
+		else if (videoLoaded && video && video.elt && video.elt.readyState >= 2) {
+			image(video, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+		}
 		drawNoise(dims);
 		return;
 	}
@@ -588,6 +629,19 @@ function draw() {
 				showingUI = true;
 			}
 			drawNoise(reverseVideo2Dims);
+		}
+		// Fallback: keep showing frozen video2 (or UI) until reverseVideo2 is ready
+		else {
+			if (video2Loaded && video2 && video2.elt && video2.elt.readyState >= 2) {
+				let video2Dims = getDisplayDimensions(video2.width, video2.height);
+				image(video2, video2Dims.offsetX, video2Dims.offsetY, video2Dims.displayWidth, video2Dims.displayHeight);
+				drawNoise(video2Dims);
+			} else if (uiImages['p3']) {
+				let img = uiImages['p3'];
+				let uiDims = getDisplayDimensions(img.width, img.height);
+				image(img, uiDims.offsetX, uiDims.offsetY, uiDims.displayWidth, uiDims.displayHeight);
+				drawNoise(uiDims);
+			}
 		}
 		return;
 	}
@@ -619,6 +673,19 @@ function draw() {
 				}
 			}
 			drawNoise(video5Dims);
+		}
+		// Fallback: keep showing the last video4 frame while video5 loads
+		else {
+			let fallbackDrawn = false;
+			let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+			if (isIOS && video4IOSCachedImage && video4IOSCachedImage.width > 0) {
+				image(video4IOSCachedImage, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+				fallbackDrawn = true;
+			} else if (video4Frames[video4LastDisplayedFrame] && video4Frames[video4LastDisplayedFrame].width > 0) {
+				image(video4Frames[video4LastDisplayedFrame], dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+				fallbackDrawn = true;
+			}
+			if (fallbackDrawn) drawNoise(dims);
 		}
 		return;
 	}
@@ -654,36 +721,48 @@ function draw() {
 			
 			// Get current frame index
 			let frameIndex = floor(constrain(video4CurrentFrame, 0, video4FrameCount - 1));
-			
-			// iOS: VERY aggressively clean up frames to prevent memory crashes
 			let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+			
 			if (isIOS) {
 				video4IOSDesiredFrame = frameIndex;
-				// Keep only 1-2 frames around current position
-				let cleanupRadius = 1;
+				let now = millis();
+				let canStart = (video4IOSInFlightIndex === -1) && (now - video4IOSLastLoadStart >= VIDEO4_IOS_LOAD_COOLDOWN);
 				
-				// Clean up ALL frames except immediate neighbors
-				for (let i = 0; i < video4FrameCount; i++) {
-					if (video4Frames[i] && Math.abs(i - frameIndex) > cleanupRadius) {
-						try {
-							disposeVideo4Frame(video4Frames[i]);
-						} catch(e) {}
-						video4Frames[i] = null;
-					}
+				if (video4IOSCachedIndex !== video4IOSDesiredFrame && canStart) {
+					let desired = video4IOSDesiredFrame;
+					video4IOSInFlightIndex = desired;
+					video4IOSLastLoadStart = now;
+					let frameNum = nf(desired, 3);
+					loadImage(
+						`img/video4/video4-${frameNum}.jpg`,
+						(img) => {
+							// If user moved since request, drop to avoid piling up
+							if (video4IOSDesiredFrame !== desired) {
+								disposeVideo4Frame(img);
+								if (video4IOSInFlightIndex === desired) video4IOSInFlightIndex = -1;
+								return;
+							}
+							let stored = downscaleToGraphicsIfNeeded(img, VIDEO4_IOS_MAX_DIM);
+							if (video4IOSCachedImage) disposeVideo4Frame(video4IOSCachedImage);
+							video4IOSCachedImage = stored;
+							video4IOSCachedIndex = desired;
+							video4LastDisplayedFrame = desired;
+							video4IOSInFlightIndex = -1;
+						},
+						() => {
+							if (video4IOSInFlightIndex === desired) video4IOSInFlightIndex = -1;
+						}
+					);
 				}
-			}
-			
-			// Smart preloading: adaptive radius based on device and only load if frame changed
-			if (frameIndex !== video4PrevFrame) {
-				// Calculate scroll speed to adjust preloading
-				let frameDiff = Math.abs(frameIndex - video4PrevFrame);
-				let isFastScrolling = frameDiff > 2;
 				
-				let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-				let preloadRadius = 0;
-				if (!isIOS) {
-					preloadRadius = (width < 768) ? 8 : 15;
-					// Prioritize forward loading (direction of auto-play)
+				// Display cached frame, otherwise keep last (cached) image (avoid black)
+				if (video4IOSCachedImage && video4IOSCachedImage.width > 0) {
+					image(video4IOSCachedImage, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+				}
+			} else {
+				// Non-iOS: prefetch and cache multiple frames
+				if (frameIndex !== video4PrevFrame) {
+					let preloadRadius = (width < 768) ? 8 : 15;
 					for (let i = 0; i <= preloadRadius; i++) {
 						let preloadIndex = frameIndex + i;
 						if (preloadIndex >= 0 && preloadIndex < video4FrameCount && !video4Frames[preloadIndex]) {
@@ -700,10 +779,6 @@ function draw() {
 							);
 						}
 					}
-				}
-				
-				// Load behind (smaller radius) - skip on iOS to save memory
-				if (!isIOS) {
 					let backRadius = Math.floor(preloadRadius / 2);
 					for (let i = 1; i <= backRadius; i++) {
 						let preloadIndex = frameIndex - i;
@@ -712,54 +787,17 @@ function draw() {
 							video4Frames[preloadIndex] = loadImage(`img/video4/video4-${frameNum}.jpg`);
 						}
 					}
+					video4PrevFrame = frameIndex;
 				}
 				
-				video4PrevFrame = frameIndex;
-			}
-			
-			// iOS: Only load the desired frame, one at a time, and downscale immediately
-			if (isIOS) {
-				let desired = video4IOSDesiredFrame;
-				let now = millis();
-				let canStart = (video4IOSInFlightIndex === -1) && (now - video4IOSLastLoadStart >= VIDEO4_IOS_LOAD_COOLDOWN);
-				
-				if (desired >= 0 && desired < video4FrameCount && !video4Frames[desired] && canStart) {
-					video4IOSInFlightIndex = desired;
-					video4IOSLastLoadStart = now;
-					let frameNum = nf(desired, 3);
-					loadImage(
-						`img/video4/video4-${frameNum}.jpg`,
-						(img) => {
-							// If user moved since request, drop this frame to avoid piling up
-							if (video4IOSDesiredFrame !== desired) {
-								disposeVideo4Frame(img);
-								if (video4IOSInFlightIndex === desired) video4IOSInFlightIndex = -1;
-								return;
-							}
-							let stored = downscaleToGraphicsIfNeeded(img, VIDEO4_IOS_MAX_DIM);
-							video4Frames[desired] = stored;
-							video4FrameLastUse[desired] = millis();
-							video4IOSInFlightIndex = -1;
-						},
-						() => {
-							// On iOS: avoid retries (extra memory/CPU). Just clear in-flight.
-							if (video4IOSInFlightIndex === desired) {
-								video4IOSInFlightIndex = -1;
-							}
-						}
-					);
+				if (video4Frames[frameIndex] && video4Frames[frameIndex].width > 0) {
+					image(video4Frames[frameIndex], dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+					video4LastDisplayedFrame = frameIndex;
+					video4FrameLastUse[frameIndex] = millis();
+				} else if (video4Frames[video4LastDisplayedFrame] && video4Frames[video4LastDisplayedFrame].width > 0) {
+					image(video4Frames[video4LastDisplayedFrame], dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
+					video4FrameLastUse[video4LastDisplayedFrame] = millis();
 				}
-			}
-			
-			// Display the current frame if loaded, otherwise show last displayed frame
-			if (video4Frames[frameIndex] && video4Frames[frameIndex].width > 0) {
-				image(video4Frames[frameIndex], dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
-				video4LastDisplayedFrame = frameIndex;
-				video4FrameLastUse[frameIndex] = millis();
-			} else if (video4Frames[video4LastDisplayedFrame] && video4Frames[video4LastDisplayedFrame].width > 0) {
-				// Show last successfully displayed frame while new one loads
-				image(video4Frames[video4LastDisplayedFrame], dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
-				video4FrameLastUse[video4LastDisplayedFrame] = millis();
 			}
 		}
 		
@@ -795,6 +833,7 @@ function draw() {
 				playingVideo3 = false;
 				// Start video4 (frame-based, ready for scroll control)
 				if (video4Loaded) {
+					resetVideo4IOSCache();
 					playingVideo4 = true;
 					video4CurrentFrame = 0;
 					video4PrevFrame = 0;
@@ -804,6 +843,13 @@ function draw() {
 				}
 			}
 			drawNoise(video3Dims);
+		}
+		// Fallback: keep showing UI until video3 is ready
+		else if (showingUI && uiImages[currentUIState]) {
+			let img = uiImages[currentUIState];
+			let uiDims = getDisplayDimensions(img.width, img.height);
+			image(img, uiDims.offsetX, uiDims.offsetY, uiDims.displayWidth, uiDims.displayHeight);
+			drawNoise(uiDims);
 		}
 		return;
 	}
@@ -821,6 +867,13 @@ function draw() {
 				video2.pause();
 				video2.time(video2.duration());
 			}
+		}
+		// Fallback: keep showing UI until video2 is ready
+		else if (showingUI && uiImages[currentUIState]) {
+			let img = uiImages[currentUIState];
+			let uiDims = getDisplayDimensions(img.width, img.height);
+			image(img, uiDims.offsetX, uiDims.offsetY, uiDims.displayWidth, uiDims.displayHeight);
+			drawNoise(uiDims);
 		}
 		
 		// Draw back button when video2 is at the end (but not when reverseVideo2 is playing)
@@ -1255,6 +1308,8 @@ function handleBackButtonClick(x, y) {
 		if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
 			playSound(ticlicSound, 0.4);
 			document.body.style.cursor = 'default';
+			// Free as much memory as possible before loading video5 (iOS stability)
+			resetVideo4IOSCache();
 			if (video5Loaded && video5) {
 				video5.time(0);
 				video5.play();
@@ -1723,6 +1778,7 @@ function keyReleased() {
 		// Check if back button is available in video4 (and not playing video5)
 		if (playingVideo4 && !playingVideo5) {
 			playSound(ticlicSound, 0.4);
+			resetVideo4IOSCache();
 			if (video5Loaded && video5) {
 				video5.time(0);
 				video5.play();
@@ -1759,21 +1815,10 @@ function keyReleased() {
 function windowResized() {
 	let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 	let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
-	resizeCanvas(w, h, WEBGL);
+	resizeCanvas(w, h);
 	
 	// Clear dimension cache to force recalculation
 	cachedDims = null;
-	
-	// On iOS, clear some cached frames to free memory
-	let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-	if (isIOS && video4Frames.length > 50) {
-		// Keep only nearby frames
-		for (let i = 0; i < video4Frames.length; i++) {
-			if (Math.abs(i - video4CurrentFrame) > 10 && video4Frames[i]) {
-				video4Frames[i] = null;
-			}
-		}
-	}
 }
 
 
