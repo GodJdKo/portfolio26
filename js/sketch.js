@@ -375,6 +375,12 @@ function setupVideo(videoPath, onLoadCallback) {
 		vid.elt.setAttribute('crossorigin', 'anonymous');
 		vid.elt.muted = false;
 		
+		// Disable hardware acceleration to prevent additional WebGL context creation
+		vid.elt.style.imageRendering = 'auto';
+		vid.elt.style.transform = 'translateZ(0)';
+		vid.elt.style.backfaceVisibility = 'hidden';
+		vid.elt.style.webkitBackfaceVisibility = 'hidden';
+		
 		// Reduce quality on iOS for smoother playback
 		if (isIOS) {
 			vid.elt.style.imageRendering = 'auto';
@@ -975,12 +981,8 @@ function draw() {
 			// Calculate fresh dimensions for video2
 			let video2Dims = getDisplayDimensions(video2.width, video2.height);
 			
-			// Enable smoothing for video2 to preserve text legibility (especially last frame)
-			push();
-			try { smooth(); } catch(e) {}
+			// Render video2
 			image(video2, video2Dims.offsetX, video2Dims.offsetY, video2Dims.displayWidth, video2Dims.displayHeight);
-			pop();
-			try { noSmooth(); } catch(e) {}
 			
 			// Ensure video is paused at end (iPad fix)
 			if (video2.time() >= video2.duration() - 0.1) {
@@ -1051,6 +1053,9 @@ function draw() {
 			renderButtonPressEffect(uiDims, true);
 		}
 		
+		// Check cursor state for UI buttons
+		let cursorOverUIButton = false;
+		
 		// Draw external link button if link is defined for current state
 		const currentLink = navigationMap[currentUIState]?.link;
 		if (currentLink && extUI0Img && extUIImg) {
@@ -1063,10 +1068,26 @@ function draw() {
 			                mouseY >= btnY && mouseY <= btnY + btnSize;
 			
 			if (isHovered) {
-				document.body.style.cursor = 'pointer';
+				cursorOverUIButton = true;
 			}
 			image(isHovered ? extUIImg : extUI0Img, btnX, btnY, btnSize, btnSize);
 		}
+		
+		// Check if cursor is over arrow buttons
+		let scaleFactor = uiDims.displayWidth / videoOriginalWidth;
+		for (let btn of squareButtons) {
+			let btnX = uiDims.offsetX + (btn.x / videoOriginalWidth) * uiDims.displayWidth;
+			let btnY = uiDims.offsetY + (btn.y / videoOriginalHeight) * uiDims.displayHeight;
+			let btnSize = btn.size * scaleFactor;
+			if (mouseX >= btnX && mouseX <= btnX + btnSize &&
+			    mouseY >= btnY && mouseY <= btnY + btnSize) {
+				cursorOverUIButton = true;
+				break;
+			}
+		}
+		
+		// Set cursor based on hover state
+		document.body.style.cursor = cursorOverUIButton ? 'pointer' : 'default';
 		
 		// Render arrow button press effects
 		renderArrowButtonEffects(uiDims);
