@@ -202,6 +202,25 @@ function setup() {
 	
 	if (video) video.time(0);
 	
+	// Auto-fix mobile stretching issues
+	let checkCount = 0;
+	const checkResize = setInterval(() => {
+		checkCount++;
+		let currentW = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+		let currentH = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+		
+		// Fix if dimensions are wrong or aspect ratio is way off
+		if (Math.abs(width - currentW) > 10 || Math.abs(height - currentH) > 10) {
+			resizeCanvas(currentW, currentH);
+			cachedDims = null;
+		}
+		
+		// Stop checking after 3 seconds
+		if (checkCount >= 15) {
+			clearInterval(checkResize);
+		}
+	}, 200);
+	
 	// Prevent default touch behaviors
 	document.documentElement.style.touchAction = 'none';
 	document.documentElement.style.overflow = 'hidden';
@@ -499,7 +518,7 @@ function draw() {
 	
 	// Render reverse video
 	if (playingReverseVideo) {
-		if (reverseVideoLoaded && reverseVideo) {
+		if (reverseVideoLoaded && reverseVideo && reverseVideo.elt && reverseVideo.elt.readyState >= 3) {
 			image(reverseVideo, dims.offsetX, dims.offsetY, dims.displayWidth, dims.displayHeight);
 			
 			if (reverseVideo.time() >= reverseVideo.duration()) {
@@ -519,7 +538,7 @@ function draw() {
 	// Render reversevideo2
 	if (playingReverseVideo2) {
 		lastReverseVideo2Use = millis();
-		if (reverseVideo2Loaded && reverseVideo2) {
+		if (reverseVideo2Loaded && reverseVideo2 && reverseVideo2.elt && reverseVideo2.elt.readyState >= 3) {
 			// Calculate fresh dimensions for reverseVideo2
 			let reverseVideo2Dims = getDisplayDimensions(reverseVideo2.width, reverseVideo2.height);
 			image(reverseVideo2, reverseVideo2Dims.offsetX, reverseVideo2Dims.offsetY, reverseVideo2Dims.displayWidth, reverseVideo2Dims.displayHeight);
@@ -540,7 +559,7 @@ function draw() {
 	// Render video5 (exit transition from video4)
 	if (playingVideo5) {
 		lastVideo5Use = millis();
-		if (video5Loaded && video5) {
+		if (video5Loaded && video5 && video5.elt && video5.elt.readyState >= 3) {
 			// Calculate fresh dimensions for video5
 			let video5Dims = getDisplayDimensions(video5.width, video5.height);
 			image(video5, video5Dims.offsetX, video5Dims.offsetY, video5Dims.displayWidth, video5Dims.displayHeight);
@@ -693,7 +712,7 @@ function draw() {
 	// Render video3 (entrance transition to video4)
 	if (playingVideo3) {
 		lastVideo3Use = millis();
-		if (video3Loaded && video3) {
+		if (video3Loaded && video3 && video3.elt && video3.elt.readyState >= 3) {
 			// Calculate fresh dimensions for video3
 			let video3Dims = getDisplayDimensions(video3.width, video3.height);
 			image(video3, video3Dims.offsetX, video3Dims.offsetY, video3Dims.displayWidth, video3Dims.displayHeight);
@@ -720,7 +739,7 @@ function draw() {
 	// Render video2 with back button
 	if (playingVideo2) {
 		lastVideo2Use = millis();
-		if (video2Loaded && video2) {
+		if (video2Loaded && video2 && video2.elt && video2.elt.readyState >= 3) {
 			// Calculate fresh dimensions for video2
 			let video2Dims = getDisplayDimensions(video2.width, video2.height);
 			image(video2, video2Dims.offsetX, video2Dims.offsetY, video2Dims.displayWidth, video2Dims.displayHeight);
