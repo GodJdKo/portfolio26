@@ -24,7 +24,7 @@ function requestFullscreen() {
 }
 
 // Images
-let btnPressedImg, lightMaskImg, backUI0Img, backUIImg;
+let btnPressedImg, lightMaskImg, backUI0Img, backUIImg, extUI0Img, extUIImg;
 let uiImages = {};
 let firstFrameImages = [];
 let noiseImages = [];
@@ -67,7 +67,7 @@ let playingVideo5 = false;
 let isPlaying = false;
 
 // UI Navigation
-const availableImages = ['p0', 'p1', 'p2', 'p3'];
+const availableImages = ['p0', 'p1', 'p2', 'p3', 'p11', 'p111', 'p112'];
 let currentUIState = 'p0';
 let showingUI = false;
 
@@ -153,6 +153,8 @@ function preload() {
 	lightMaskImg = loadImage('img/lightmask.png');
 	backUI0Img = loadImage('img/UI/backUI0.png');
 	backUIImg = loadImage('img/UI/backUI.png');
+	extUI0Img = loadImage('img/UI/extUI0.png');
+	extUIImg = loadImage('img/UI/extUI.png');
 	
 	// Load UI navigation images
 	for (let imgName of availableImages) {
@@ -1000,6 +1002,23 @@ function draw() {
 			renderButtonPressEffect(uiDims, true);
 		}
 		
+		// Draw external link button if link is defined for current state
+		const currentLink = navigationMap[currentUIState]?.link;
+		if (currentLink && extUI0Img && extUIImg) {
+			let smallestSide = min(width, height);
+			let btnSize = smallestSide / 5;
+			let btnX = 30; // Bottom left corner
+			let btnY = height - btnSize - 90;
+			
+			let isHovered = mouseX >= btnX && mouseX <= btnX + btnSize &&
+			                mouseY >= btnY && mouseY <= btnY + btnSize;
+			
+			if (isHovered) {
+				document.body.style.cursor = 'pointer';
+			}
+			image(isHovered ? extUIImg : extUI0Img, btnX, btnY, btnSize, btnSize);
+		}
+		
 		// Render arrow button press effects
 		renderArrowButtonEffects(uiDims);
 		
@@ -1244,109 +1263,110 @@ function stopSound(sound) {
 }
 
 // Navigation functions
+// Navigation map: define where each state goes for each direction
+// Format: 'state': { up: 'targetState', down: 'targetState', left: 'targetState', right: 'targetState', link: 'https://example.com' }
+// Use null or omit direction if it shouldn't change state
+// Use 'VIDEO_3' or 'VIDEO_2' for special video transitions
+// Add 'link' property to show external link button (opens in new tab)
+const navigationMap = {
+	'p0': { right: 'p1' },
+	'p1': { left: 'p0', down: 'p2', right: 'p11' },
+	'p2': { left: 'p0', up: 'p1', down: 'p3', right: 'VIDEO_3' },
+	'p3': { left: 'p0', up: 'p2', right: 'VIDEO_2' },
+	'p11': { left: 'p1', right: 'p111', link: 'https://github.com/godjdko/portfolio26' },
+	'p111': { left: 'p11', down: 'p112', link: 'https://github.com/godjdko/portfolio26' },
+	'p112': { left: 'p11', up: 'p111', link: 'https://github.com/godjdko/portfolio26' }
+};
+
 function navigateLeft() {
-	let depth = currentUIState.replace('p', '').length;
-	
-	if (depth === 1) {
-		// From any depth-1 state (p1, p2, p3), go back to p0
-		if (currentUIState !== 'p0') {
-			currentUIState = 'p0';
-		}
-	} else if (depth > 1) {
-		let base = currentUIState.slice(0, -1);
-		let lastDigit = parseInt(currentUIState.slice(-1));
-		let newState = base + (lastDigit - 1);
-		if (lastDigit > 1 && availableImages.includes(newState)) {
-			currentUIState = newState;
-		}
+	const target = navigationMap[currentUIState]?.left;
+	if (target && availableImages.includes(target)) {
+		currentUIState = target;
 	}
 }
 
 function navigateRight() {
-	let depth = currentUIState.replace('p', '').length;
+	const target = navigationMap[currentUIState]?.right;
 	
-	if (depth === 1) {
-		if (currentUIState === 'p0') {
-			currentUIState = 'p1';
-		} else if (currentUIState === 'p2') {
-			showingUI = false;
-			// Load video3 and video5 on-demand when needed
-			if (!video3) {
-				video3 = setupVideo('img/video3.mp4', () => { video3Loaded = true; });
-				lastVideo3Use = millis();
-			}
-			if (!video5) {
-				video5 = setupVideo('img/video5.mp4', () => { video5Loaded = true; });
-				lastVideo5Use = millis();
-			}
-			if (video3Loaded && video3) {
-				video3.time(0);
-				video3.play();
-				playingVideo3 = true;
-				lastVideo3Use = millis();
-				cachedDims = null; // Clear cache for video3 dimensions
-			}
-		} else if (currentUIState === 'p3') {
-			showingUI = false;
-			// Load video2 and reverseVideo2 on-demand when needed
-			if (!video2) {
-				video2 = setupVideo('img/video2.mp4', () => { video2Loaded = true; });
-				lastVideo2Use = millis();
-			}
-			if (!reverseVideo2) {
-				reverseVideo2 = setupVideo('img/reversevideo2.mp4', () => { reverseVideo2Loaded = true; });
-				lastReverseVideo2Use = millis();
-			}
-			if (video2Loaded && video2) {
-				video2.time(0);
-				video2.play();
-				playingVideo2 = true;
-				lastVideo2Use = millis();
-				cachedDims = null; // Clear cache for video2 dimensions
-			}
+	// Handle special video transitions
+	if (target === 'VIDEO_3') {
+		showingUI = false;
+		if (!video3) {
+			video3 = setupVideo('img/video3.mp4', () => { video3Loaded = true; });
+			lastVideo3Use = millis();
 		}
-	} else {
-		let base = currentUIState.slice(0, -1);
-		let lastDigit = parseInt(currentUIState.slice(-1));
-		let newState = base + (lastDigit + 1);
-		if (availableImages.includes(newState)) {
-			currentUIState = newState;
+		if (!video5) {
+			video5 = setupVideo('img/video5.mp4', () => { video5Loaded = true; });
+			lastVideo5Use = millis();
 		}
+		if (video3Loaded && video3) {
+			video3.time(0);
+			video3.play();
+			playingVideo3 = true;
+			lastVideo3Use = millis();
+			cachedDims = null;
+		}
+		return;
+	}
+	
+	if (target === 'VIDEO_2') {
+		showingUI = false;
+		if (!video2) {
+			video2 = setupVideo('img/video2.mp4', () => { video2Loaded = true; });
+			lastVideo2Use = millis();
+		}
+		if (!reverseVideo2) {
+			reverseVideo2 = setupVideo('img/reversevideo2.mp4', () => { reverseVideo2Loaded = true; });
+			lastReverseVideo2Use = millis();
+		}
+		if (video2Loaded && video2) {
+			video2.time(0);
+			video2.play();
+			playingVideo2 = true;
+			lastVideo2Use = millis();
+			cachedDims = null;
+		}
+		return;
+	}
+	
+	if (target && availableImages.includes(target)) {
+		currentUIState = target;
 	}
 }
 
 function navigateDown() {
-	let depth = currentUIState.replace('p', '').length;
-	
-	if (depth === 1) {
-		if (currentUIState === 'p1') currentUIState = 'p2';
-		else if (currentUIState === 'p2') currentUIState = 'p3';
-	} else if (depth < 3) {
-		let newState = currentUIState + '1';
-		if (availableImages.includes(newState)) {
-			currentUIState = newState;
-			showingUI = true;
-			if (video && video.elt) video.pause();
-		}
+	const target = navigationMap[currentUIState]?.down;
+	if (target && availableImages.includes(target)) {
+		currentUIState = target;
 	}
 }
 
 function navigateUp() {
-	let depth = currentUIState.replace('p', '').length;
-	
-	if (depth === 1) {
-		if (currentUIState === 'p3') currentUIState = 'p2';
-		else if (currentUIState === 'p2') currentUIState = 'p1';
-	} else if (depth > 1) {
-		let newState = currentUIState.slice(0, -1);
-		if (availableImages.includes(newState)) {
-			currentUIState = newState;
-		}
+	const target = navigationMap[currentUIState]?.up;
+	if (target && availableImages.includes(target)) {
+		currentUIState = target;
 	}
 }
 
 // Helper: Handle back button click
 function handleBackButtonClick(x, y) {
+	// Check external link button in UI mode
+	if (showingUI) {
+		const currentLink = navigationMap[currentUIState]?.link;
+		if (currentLink && extUI0Img && extUIImg) {
+			let smallestSide = min(width, height);
+			let btnSize = smallestSide / 5;
+			let btnX = 30; // Bottom left
+			let btnY = height - btnSize - 90;
+			
+			if (x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize) {
+				playSound(ticlicSound, 0.4);
+				window.open(currentLink, '_blank');
+				return true;
+			}
+		}
+	}
+	
 	// Check video2 back button (iPad timing fix)
 	if (playingVideo2 && video2.time() >= video2.duration() - 0.1) {
 		let smallestSide = min(width, height);
