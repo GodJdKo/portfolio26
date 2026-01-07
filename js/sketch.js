@@ -1,6 +1,28 @@
 // Sound effects
 let clickSound, jingleSound, antijingleSound, clacSound, ticlicSound;
 
+// Fullscreen management
+let fullscreenRequested = false;
+
+function requestFullscreen() {
+	if (fullscreenRequested) return;
+	
+	const elem = document.documentElement;
+	if (elem.requestFullscreen) {
+		elem.requestFullscreen().catch(err => console.log('Fullscreen request failed:', err));
+		fullscreenRequested = true;
+	} else if (elem.webkitRequestFullscreen) { // Safari
+		elem.webkitRequestFullscreen();
+		fullscreenRequested = true;
+	} else if (elem.mozRequestFullScreen) { // Firefox
+		elem.mozRequestFullScreen();
+		fullscreenRequested = true;
+	} else if (elem.msRequestFullscreen) { // IE/Edge
+		elem.msRequestFullscreen();
+		fullscreenRequested = true;
+	}
+}
+
 // Images
 let btnPressedImg, lightMaskImg, backUI0Img, backUIImg;
 let uiImages = {};
@@ -596,14 +618,15 @@ function draw() {
 			let video2Dims = getDisplayDimensions(video2.width, video2.height);
 			image(video2, video2Dims.offsetX, video2Dims.offsetY, video2Dims.displayWidth, video2Dims.displayHeight);
 			
-			if (video2.time() >= video2.duration()) {
+			// Ensure video is paused at end (iPad fix)
+			if (video2.time() >= video2.duration() - 0.1) {
 				video2.pause();
 				video2.time(video2.duration());
 			}
 		}
 		
-		// Draw back button when video2 is frozen (but not when reverseVideo2 is playing)
-		if (video2.time() >= video2.duration() && !playingReverseVideo2 && backUI0Img && backUIImg) {
+		// Draw back button when video2 is at the end (but not when reverseVideo2 is playing)
+		if (video2.time() >= video2.duration() - 0.1 && !playingReverseVideo2 && backUI0Img && backUIImg) {
 			let smallestSide = min(width, height);
 			let btnSize = smallestSide / 5;
 			let btnX = width - btnSize - 30;
@@ -986,8 +1009,8 @@ function navigateUp() {
 
 // Helper: Handle back button click
 function handleBackButtonClick(x, y) {
-	// Check video2 back button
-	if (playingVideo2 && video2.time() >= video2.duration()) {
+	// Check video2 back button (iPad timing fix)
+	if (playingVideo2 && video2.time() >= video2.duration() - 0.1) {
 		let smallestSide = min(width, height);
 		let btnSize = smallestSide / 5;
 		let btnX = width - btnSize - 30;
@@ -1157,6 +1180,11 @@ function handleArrowNavigation(x, y) {
 }
 
 function mousePressed() {
+	// Request fullscreen on mobile on first interaction
+	if (!fullscreenRequested && /iPad|iPhone|iPod|Android/i.test(navigator.userAgent)) {
+		requestFullscreen();
+	}
+	
 	if (playingVideo4) {
 		video4IsUserInteracting = true;
 		video4LastScrollTime = millis();
