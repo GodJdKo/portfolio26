@@ -145,8 +145,22 @@ function preload() {
 	}
 	
 	// Load first frame animation images
+	let firstFrameLoadCount = 0;
 	for (let i = 0; i < 5; i++) {
-		firstFrameImages[i] = loadImage(`img/firstframe/firstframe${i}.jpg`);
+		firstFrameImages[i] = loadImage(`img/firstframe/firstframe${i}.jpg`, () => {
+			firstFrameLoadCount++;
+			// Trigger resize when first frame loads (Android Chrome fix)
+			if (firstFrameLoadCount === 1) {
+				setTimeout(() => {
+					let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+					let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+					if (typeof resizeCanvas === 'function') {
+						resizeCanvas(w, h);
+						cachedDims = null;
+					}
+				}, 100);
+			}
+		});
 	}
 	
 	// Load noise images
@@ -158,7 +172,11 @@ function preload() {
 function setup() {
 	let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 	
-	let canvas = createCanvas(window.innerWidth, window.innerHeight, WEBGL);
+	// Get actual viewport dimensions (Android Chrome fix)
+	let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+	let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+	
+	let canvas = createCanvas(w, h, WEBGL);
 	canvas.parent(document.body);
 	canvas.style('display', 'block');
 	canvas.style('position', 'fixed');
@@ -206,7 +224,9 @@ function setup() {
 	// Handle orientation changes
 	window.addEventListener('orientationchange', () => {
 		setTimeout(() => {
-			resizeCanvas(window.innerWidth, window.innerHeight);
+			let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+			let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+			resizeCanvas(w, h);
 			cachedDims = null;
 		}, 400);
 	});
@@ -1646,8 +1666,8 @@ function keyReleased() {
 }
 
 function windowResized() {
-	let w = window.innerWidth;
-	let h = window.innerHeight;
+	let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+	let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
 	resizeCanvas(w, h, WEBGL);
 	
 	// Clear dimension cache to force recalculation
