@@ -189,13 +189,48 @@ function preload() {
 
 function setup() {
 	let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-	try { setAttributes('antialias', false); } catch (e) {}
 	
 	// Get actual viewport dimensions (Android Chrome fix)
 	let w = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 	let h = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
 	
-	let canvas = createCanvas(w, h, WEBGL);
+	// Ensure dimensions are reasonable (prevent GPU issues with extreme sizes)
+	w = Math.min(w, 4096);
+	h = Math.min(h, 4096);
+	
+	console.log('Creating canvas:', w, 'x', h);
+	
+	// Try WEBGL with multiple fallback strategies
+	let canvas;
+	let rendererMode = 'WEBGL';
+	
+	try {
+		// First attempt: WEBGL with antialias disabled
+		setAttributes('antialias', false);
+		canvas = createCanvas(w, h, WEBGL);
+		console.log('✓ Using WEBGL renderer (antialias off)');
+	} catch (e) {
+		console.warn('WebGL failed (antialias off):', e.message);
+		try {
+			// Second attempt: WEBGL with default attributes
+			canvas = createCanvas(w, h, WEBGL);
+			console.log('✓ Using WEBGL renderer (default attributes)');
+		} catch (e2) {
+			console.warn('WebGL failed (default):', e2.message);
+			try {
+				// Final fallback: P2D mode
+				canvas = createCanvas(w, h, P2D);
+				rendererMode = 'P2D';
+				console.log('✓ Using P2D renderer (WebGL unavailable)');
+			} catch (e3) {
+				console.error('All renderers failed:', e3);
+				// Show error to user
+				document.body.innerHTML = '<div style="color:white;padding:40px;font-family:monospace;">Error: Unable to create canvas. Please try refreshing or use a different browser.</div>';
+				throw e3;
+			}
+		}
+	}
+	
 	mainCanvas = canvas;
 	canvas.parent(document.body);
 	canvas.style('display', 'block');
@@ -633,8 +668,12 @@ function draw() {
 	cleanupUnusedResources();
 	
 	// Reset WebGL transformations and use 2D-style coordinates
+	// In WEBGL mode, origin is at center, so translate to top-left
+	// In P2D mode, origin is already at top-left, so only translate if WEBGL
 	push();
-	translate(-width/2, -height/2);
+	if (drawingContext && drawingContext.canvas && drawingContext.canvas.getContext('webgl')) {
+		translate(-width/2, -height/2);
+	}
 	
 	// Cache dimensions to avoid recalculation every frame
 	if (!cachedDims || lastCanvasSize.w !== width || lastCanvasSize.h !== height) {
