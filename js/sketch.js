@@ -1404,7 +1404,7 @@ const navigationMap = {
 	'p11': { left: 'p1', down: 'p12', right: 'p111', link: 'https://github.com/godjdko/portfolio26' },
 	'p111': { left: 'p11', right: 'p1111',  link: 'https://github.com/godjdko/portfolio26' },
 	'p1111': { left: 'p111', link: 'https://github.com/godjdko/portfolio26' },
-	'p12': { left: 'p0', up: 'p11', down: 'p13', right: 'p121' }
+	'p12': { left: 'p1',up: 'p11' }
 };
 
 function navigateLeft() {
